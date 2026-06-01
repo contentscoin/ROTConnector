@@ -1,0 +1,17 @@
+{
+  "name": "알비연 링크 · ROTConnector",
+  "short_name": "알비연 링크",
+  "description": "ROTC 비즈니스연합회 회원의 도움요청·사업소개·행사·후원·협업을 한곳에.",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#16264a",
+  "theme_color": "#213a66",
+  "icons": [
+    { "src": "/icons/icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ]
+}
