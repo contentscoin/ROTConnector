@@ -1,0 +1,73 @@
+@import 'tailwindcss';
+
+/* ROTConnector / 알비연 링크 — 디자인 토큰
+   신뢰의 네이비 + 명예의 골드. 모바일 퍼스트. */
+@theme {
+  --color-navy-50: #f1f5fb;
+  --color-navy-100: #dde7f5;
+  --color-navy-200: #c0d2ec;
+  --color-navy-300: #93b2dd;
+  --color-navy-400: #5f8aca;
+  --color-navy-500: #3c69b4;
+  --color-navy-600: #2c5198;
+  --color-navy-700: #25427b;
+  --color-navy-800: #213a66;
+  --color-navy-900: #16264a;
+  --color-navy-950: #0e1830;
+
+  --color-gold-400: #f0c45a;
+  --color-gold-500: #e3a82e;
+  --color-gold-600: #c1841a;
+
+  --color-brand: var(--color-navy-800);
+  --color-accent: var(--color-gold-500);
+
+  --font-sans: 'Pretendard', 'Pretendard Variable', -apple-system,
+    BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui,
+    sans-serif;
+
+  --radius-card: 1rem;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--color-navy-50);
+    color: var(--color-navy-950);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    /* iOS safe-area + Capacitor */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+      env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* 모바일 폼 줌 방지 */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+@layer utilities {
+  .safe-bottom {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
