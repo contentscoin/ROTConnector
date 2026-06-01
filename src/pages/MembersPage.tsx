@@ -1,11 +1,14 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery } from 'convex/react'
-import { Search, X, Users } from 'lucide-react'
+import { Search, X, Users, UserRoundPen, ChevronRight } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
-import { Chip, EmptyState, Input, Spinner } from '../components/ui'
+import { Chip, EmptyState, Input, SkeletonList } from '../components/ui'
 import { MemberCard } from '../components/cards'
+import { useSession } from '../lib/session'
 
 export function MembersPage() {
+  const { member } = useSession()
   const [q, setQ] = useState('')
   const [industry, setIndustry] = useState<string | null>(null)
   const [region, setRegion] = useState<string | null>(null)
@@ -25,6 +28,23 @@ export function MembersPage() {
           {facets ? `총 ${facets.total}명` : ' '}
         </p>
       </div>
+
+      {member && (
+        <Link to="/me" className="press block">
+          <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-navy-800 to-navy-700 px-4 py-3 text-white shadow-card">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/15">
+              <UserRoundPen className="size-4.5 text-gold-400" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold">내 사업 소개 업데이트</p>
+              <p className="truncate text-xs text-navy-100/75">
+                프로필이 완성될수록 더 잘 연결됩니다
+              </p>
+            </div>
+            <ChevronRight className="size-4 shrink-0 text-white/60" />
+          </div>
+        </Link>
+      )}
 
       {/* 검색 */}
       <div className="relative">
@@ -84,9 +104,7 @@ export function MembersPage() {
 
       {/* 목록 */}
       {members === undefined ? (
-        <div className="flex justify-center py-10">
-          <Spinner />
-        </div>
+        <SkeletonList count={6} />
       ) : members.length === 0 ? (
         <EmptyState
           icon={<Users className="size-10" />}

@@ -195,8 +195,8 @@ export function MyProfilePage() {
         {myRequests && myRequests.length > 0 ? (
           <div className="space-y-2.5">
             {myRequests.map((r) => (
-              <Link key={r._id} to={`/requests/${r._id}`} className="block">
-                <Card className="flex items-center gap-3 p-4">
+              <Link key={r._id} to={`/requests/${r._id}`} className="press block">
+                <Card className="flex items-center gap-3 p-4 hover:shadow-soft">
                   <Badge className={requestStatusTone[r.status]}>
                     {requestStatusLabel[r.status]}
                   </Badge>

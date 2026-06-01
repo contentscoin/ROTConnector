@@ -204,8 +204,8 @@ export function AdminDashboardPage() {
         ) : (
           <div className="space-y-2.5">
             {data.pendingRequests.map((r) => (
-              <Link key={r._id} to={`/requests/${r._id}`} className="block">
-                <Card className="p-4">
+              <Link key={r._id} to={`/requests/${r._id}`} className="press block">
+                <Card className="p-4 hover:shadow-soft">
                   <div className="mb-1 flex items-center gap-2">
                     <Badge className={requestStatusTone[r.status]}>
                       {requestStatusLabel[r.status]}

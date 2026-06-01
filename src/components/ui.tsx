@@ -14,11 +14,12 @@ type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 type ButtonSize = 'sm' | 'md' | 'lg'
 
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: 'bg-navy-800 text-white hover:bg-navy-900 active:bg-navy-950',
+  primary:
+    'bg-navy-800 text-white hover:bg-navy-900 active:bg-navy-950 shadow-sm shadow-navy-900/15',
   secondary:
     'bg-white text-navy-800 border border-navy-200 hover:bg-navy-50 active:bg-navy-100',
   ghost: 'bg-transparent text-navy-700 hover:bg-navy-100',
-  danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800',
+  danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-sm shadow-red-900/15',
 }
 
 const buttonSizes: Record<ButtonSize, string> = {
@@ -43,7 +44,7 @@ export function Button({
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center font-semibold transition-colors select-none disabled:opacity-50 disabled:pointer-events-none',
+        'press inline-flex items-center justify-center font-semibold transition-colors select-none disabled:opacity-50 disabled:pointer-events-none',
         buttonVariants[variant],
         buttonSizes[size],
         className,
@@ -66,7 +67,7 @@ export function Card({
   return (
     <div
       className={cn(
-        'rounded-2xl bg-white border border-navy-100 shadow-sm',
+        'rounded-2xl bg-white border border-navy-100/80 shadow-card',
         className,
       )}
       {...props}
@@ -150,7 +151,7 @@ export function Avatar({
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-full font-bold text-white',
+        'flex shrink-0 items-center justify-center rounded-full font-bold text-white shadow-sm ring-1 ring-black/5',
         avatarColors[idx],
         sizes[size],
       )}
@@ -247,6 +248,34 @@ export function EmptyState({
         <p className="mt-1 max-w-xs text-sm text-navy-500">{description}</p>
       )}
       {action && <div className="mt-4">{action}</div>}
+    </div>
+  )
+}
+
+/* ---------- Skeleton ---------- */
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={cn('skeleton', className)} aria-hidden />
+}
+
+export function SkeletonRow() {
+  return (
+    <Card className="flex items-center gap-3 p-3.5">
+      <Skeleton className="size-12 rounded-full" />
+      <div className="flex-1 space-y-2">
+        <Skeleton className="h-3.5 w-1/2" />
+        <Skeleton className="h-3 w-3/4" />
+        <Skeleton className="h-3 w-1/3" />
+      </div>
+    </Card>
+  )
+}
+
+export function SkeletonList({ count = 5 }: { count?: number }) {
+  return (
+    <div className="space-y-2.5" aria-busy>
+      {Array.from({ length: count }).map((_, i) => (
+        <SkeletonRow key={i} />
+      ))}
     </div>
   )
 }

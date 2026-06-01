@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import { Plus, Inbox } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
-import { Chip, EmptyState, Spinner } from '../components/ui'
+import { Chip, EmptyState, SkeletonList } from '../components/ui'
 import { RequestCard } from '../components/cards'
 
 type StatusFilter = 'all' | 'open' | 'matching' | 'connected'
@@ -39,9 +39,7 @@ export function RequestsPage() {
       </div>
 
       {requests === undefined ? (
-        <div className="flex justify-center py-10">
-          <Spinner />
-        </div>
+        <SkeletonList count={5} />
       ) : requests.length === 0 ? (
         <EmptyState
           icon={<Inbox className="size-10" />}

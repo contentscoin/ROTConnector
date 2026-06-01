@@ -77,13 +77,20 @@ export function Layout({ children }: { children: ReactNode }) {
               aria-label={label}
               className="flex flex-1 flex-col items-center gap-0.5 py-2.5"
             >
-              <Icon
+              <span
                 className={cn(
-                  'size-6 transition-colors',
-                  active ? 'text-navy-800' : 'text-navy-500',
+                  'flex items-center justify-center rounded-full px-4 py-0.5 transition-colors',
+                  active ? 'bg-navy-100' : 'bg-transparent',
                 )}
-                strokeWidth={active ? 2.4 : 2}
-              />
+              >
+                <Icon
+                  className={cn(
+                    'size-6 transition-colors',
+                    active ? 'text-navy-800' : 'text-navy-500',
+                  )}
+                  strokeWidth={active ? 2.4 : 2}
+                />
+              </span>
               <span
                 className={cn(
                   'text-[11px] font-medium',

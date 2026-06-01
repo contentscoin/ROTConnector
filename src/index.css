@@ -40,10 +40,18 @@
   }
   body {
     margin: 0;
-    background: var(--color-navy-50);
+    background-color: var(--color-navy-50);
+    background-image: radial-gradient(
+      130% 55% at 50% -10%,
+      rgba(44, 81, 152, 0.1),
+      transparent 60%
+    );
+    background-attachment: fixed;
     color: var(--color-navy-950);
     font-family: var(--font-sans);
+    letter-spacing: -0.01em;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
     /* iOS safe-area + Capacitor */
     padding: env(safe-area-inset-top) env(safe-area-inset-right)
       env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -69,5 +77,53 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+  /* 탭 시 미세 눌림 피드백 */
+  .press {
+    transition:
+      transform 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .press:active {
+    transform: scale(0.985);
+  }
+  /* 부드러운 카드 그림자 */
+  .shadow-card {
+    box-shadow:
+      0 1px 2px rgba(14, 24, 48, 0.04),
+      0 4px 16px -6px rgba(14, 24, 48, 0.1);
+  }
+  .shadow-soft {
+    box-shadow: 0 8px 30px -10px rgba(14, 24, 48, 0.18);
+  }
+  /* 스켈레톤 시머 */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      #dde7f5 25%,
+      #eef3fb 37%,
+      #dde7f5 63%
+    );
+    background-size: 400% 100%;
+    animation: shimmer 1.4s ease infinite;
+    border-radius: 0.5rem;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+  .press:active {
+    transform: none;
   }
 }

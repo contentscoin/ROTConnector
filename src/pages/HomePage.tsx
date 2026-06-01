@@ -33,27 +33,34 @@ export function HomePage() {
   return (
     <div className="space-y-7">
       {/* Hero */}
-      <section className="rounded-3xl bg-gradient-to-br from-navy-800 to-navy-950 p-6 text-white">
-        <h1 className="text-2xl leading-snug font-extrabold tracking-tight">
-          선후배의 신뢰를
-          <br />
-          비즈니스 연결로.
-        </h1>
-        <p className="mt-2.5 text-sm leading-relaxed text-navy-100/80">
-          알비연 링크는 ROTC 비즈니스연합회 회원의 도움요청·사업소개·행사·후원·협업
-          기회를 한곳에 정리합니다.
-        </p>
-        <div className="mt-5 grid grid-cols-2 gap-2.5">
-          {actions.map(({ to, label, icon: Icon }) => (
-            <Link
-              key={to}
-              to={to}
-              className="flex items-center gap-2 rounded-xl bg-white/10 px-3.5 py-3 text-sm font-semibold backdrop-blur transition-colors hover:bg-white/20"
-            >
-              <Icon className="size-4.5 text-gold-400" />
-              {label}
-            </Link>
-          ))}
+      <section className="relative -mx-4 -mt-4 overflow-hidden rounded-b-[2rem] bg-gradient-to-br from-navy-800 to-navy-950 px-6 pt-7 pb-7 text-white shadow-soft">
+        <div className="pointer-events-none absolute -top-16 -right-10 size-48 rounded-full bg-gold-500/20 blur-3xl" />
+        <div className="relative">
+          <span className="inline-flex items-center rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-gold-400 ring-1 ring-white/10">
+            ROTC 비즈니스연합회
+          </span>
+          <h1 className="mt-3 text-[26px] leading-snug font-extrabold tracking-tight">
+            선후배의 신뢰를
+            <br />
+            비즈니스 연결로.
+          </h1>
+          <p className="mt-2.5 text-sm leading-relaxed text-navy-100/80">
+            도움요청·사업소개·행사·후원·협업 기회를 한곳에.
+          </p>
+          <div className="mt-5 grid grid-cols-2 gap-2.5">
+            {actions.map(({ to, label, icon: Icon }) => (
+              <Link
+                key={to}
+                to={to}
+                className="press flex items-center gap-2.5 rounded-2xl bg-white/10 px-3.5 py-3 text-sm font-semibold ring-1 ring-white/10 backdrop-blur transition-colors hover:bg-white/15"
+              >
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/10">
+                  <Icon className="size-4.5 text-gold-400" />
+                </span>
+                {label}
+              </Link>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -86,7 +93,7 @@ export function HomePage() {
               <Link
                 key={m._id}
                 to={`/members/${m._id}`}
-                className="flex items-center gap-3 px-3 py-2.5"
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-navy-50"
               >
                 <span
                   className={`flex size-6 items-center justify-center rounded-full text-xs font-bold ${
@@ -121,8 +128,8 @@ export function HomePage() {
           <SectionHeader title="다가오는 행사·후원" to="/events" />
           <div className="space-y-2.5">
             {upcoming.map((e) => (
-              <Link key={e._id} to="/events" className="block">
-                <Card className="flex items-center gap-3 p-4">
+              <Link key={e._id} to="/events" className="press block">
+                <Card className="flex items-center gap-3 p-4 hover:shadow-soft">
                   <div className="flex size-11 shrink-0 flex-col items-center justify-center rounded-xl bg-navy-800 text-white">
                     <CalendarDays className="size-5" />
                   </div>
