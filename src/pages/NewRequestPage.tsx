@@ -1,11 +1,19 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation } from 'convex/react'
+import { useMutation, useQuery } from 'convex/react'
 import { ChevronLeft } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { useSession } from '../lib/session'
-import { Button, Card, Field, Input, Select, Textarea } from '../components/ui'
-import { errorMessage, splitTags } from '../lib/utils'
+import {
+  Button,
+  Card,
+  Field,
+  Input,
+  Select,
+  TagSuggest,
+  Textarea,
+} from '../components/ui'
+import { addTag, errorMessage, splitTags } from '../lib/utils'
 
 const categories = [
   '투자',
@@ -30,6 +38,7 @@ const urgencies = [
 export function NewRequestPage() {
   const { token } = useSession()
   const createRequest = useMutation(api.requests.create)
+  const tagSuggestions = useQuery(api.requests.tagSuggestions, {})
   const navigate = useNavigate()
 
   const [title, setTitle] = useState('')
@@ -123,6 +132,11 @@ export function NewRequestPage() {
               placeholder="투자유치, F&B"
               value={tags}
               onChange={(e) => setTags(e.target.value)}
+            />
+            <TagSuggest
+              suggestions={tagSuggestions ?? []}
+              value={tags}
+              onAdd={(t) => setTags(addTag(tags, t))}
             />
           </Field>
 

@@ -275,6 +275,43 @@ export function ShareButton({
   )
 }
 
+/* ---------- TagSuggest (콤마 입력 자동완성 칩) ---------- */
+// 기존 값에 없는 추천 태그를 칩으로 노출 → 클릭 시 onAdd. 태그 파편화 완화.
+export function TagSuggest({
+  suggestions,
+  value,
+  onAdd,
+}: {
+  suggestions: string[]
+  value: string
+  onAdd: (tag: string) => void
+}) {
+  const current = new Set(
+    value
+      .split(/[,\n]/)
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  )
+  const avail = suggestions
+    .filter((s) => !current.has(s.toLowerCase()))
+    .slice(0, 12)
+  if (avail.length === 0) return null
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      {avail.map((s) => (
+        <button
+          key={s}
+          type="button"
+          onClick={() => onAdd(s)}
+          className="rounded-full border border-navy-200 bg-white px-2.5 py-0.5 text-xs font-medium text-navy-500 hover:bg-navy-50"
+        >
+          + {s}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /* ---------- Spinner / states ---------- */
 export function Spinner({ className }: { className?: string }) {
   return <Loader2 className={cn('size-6 animate-spin text-navy-400', className)} />

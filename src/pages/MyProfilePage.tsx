@@ -12,10 +12,12 @@ import {
   Field,
   Input,
   Select,
+  TagSuggest,
   Textarea,
 } from '../components/ui'
 import { requestStatusLabel, requestStatusTone } from '../lib/format'
-import { errorMessage, splitTags } from '../lib/utils'
+import { addTag, errorMessage, splitTags } from '../lib/utils'
+import { profileCompleteness } from '../lib/profile'
 
 const regions = ['', '서울', '경기', '인천', '부산', '대구', '대전', '광주', '기타']
 
@@ -23,6 +25,7 @@ export function MyProfilePage() {
   const { token, member, logout } = useSession()
   const update = useMutation(api.members.update)
   const myRequests = useQuery(api.requests.mine, token ? { token } : 'skip')
+  const pool = useQuery(api.members.tagPool, {})
 
   const [form, setForm] = useState(() => ({
     name: member?.name ?? '',
@@ -40,6 +43,17 @@ export function MyProfilePage() {
   const [saving, setSaving] = useState(false)
 
   if (!member) return null
+
+  // 입력값 기준 실시간 완성도 (저장 전에도 반영)
+  const completeness = profileCompleteness({
+    intro: form.intro,
+    company: form.company,
+    title: form.title,
+    region: form.region,
+    industry: splitTags(form.industry),
+    helpOffer: splitTags(form.helpOffer),
+    helpNeed: splitTags(form.helpNeed),
+  })
 
   function set<K extends keyof typeof form>(k: K, val: string) {
     setForm((f) => ({ ...f, [k]: val }))
@@ -103,6 +117,39 @@ export function MyProfilePage() {
         </Link>
       </div>
 
+      {/* 프로필 완성도 */}
+      {completeness.percent < 100 && (
+        <Card className="p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="font-bold text-navy-800">프로필 완성도</p>
+            <span className="text-sm font-bold text-navy-700">
+              {completeness.percent}%
+            </span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-navy-100">
+            <div
+              className="h-full rounded-full bg-navy-700 transition-all"
+              style={{ width: `${completeness.percent}%` }}
+            />
+          </div>
+          {completeness.missing.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {completeness.missing.map((f) => (
+                <span
+                  key={f.key}
+                  className="rounded-full bg-gold-400/15 px-2.5 py-0.5 text-xs font-medium text-gold-600"
+                >
+                  {f.label} 추가
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="mt-2 text-xs text-navy-400">
+            완성된 프로필일수록 더 잘 연결됩니다.
+          </p>
+        </Card>
+      )}
+
       {/* 편집 폼 */}
       <Card className="space-y-4 p-5">
         <p className="font-bold text-navy-800">내 사업 소개 / 프로필</p>
@@ -155,17 +202,32 @@ export function MyProfilePage() {
             value={form.industry}
             onChange={(e) => set('industry', e.target.value)}
           />
+          <TagSuggest
+            suggestions={pool?.industries ?? []}
+            value={form.industry}
+            onAdd={(t) => set('industry', addTag(form.industry, t))}
+          />
         </Field>
         <Field label="줄 수 있는 도움" hint="쉼표로 구분">
           <Input
             value={form.helpOffer}
             onChange={(e) => set('helpOffer', e.target.value)}
           />
+          <TagSuggest
+            suggestions={pool?.helps ?? []}
+            value={form.helpOffer}
+            onAdd={(t) => set('helpOffer', addTag(form.helpOffer, t))}
+          />
         </Field>
         <Field label="필요한 도움" hint="쉼표로 구분">
           <Input
             value={form.helpNeed}
             onChange={(e) => set('helpNeed', e.target.value)}
+          />
+          <TagSuggest
+            suggestions={pool?.helps ?? []}
+            value={form.helpNeed}
+            onAdd={(t) => set('helpNeed', addTag(form.helpNeed, t))}
           />
         </Field>
 

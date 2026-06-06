@@ -30,6 +30,7 @@ import {
   timeAgo,
 } from '../lib/format'
 import { errorMessage } from '../lib/utils'
+import { profileCompleteness } from '../lib/profile'
 
 const contributionTypes = [
   'sponsor',
@@ -88,6 +89,13 @@ export function AdminDashboardPage() {
   }
 
   const s = data.stats
+
+  // 프로필 미작성(완성도 60% 미만) 회원 — 리마인드 대상
+  const incompleteMembers = (members ?? [])
+    .map((m) => ({ m, c: profileCompleteness(m) }))
+    .filter((x) => x.c.percent < 60)
+    .sort((a, b) => a.c.percent - b.c.percent)
+    .slice(0, 20)
 
   async function onApprove(id: Id<'members'>) {
     if (!token) return
@@ -321,6 +329,41 @@ export function AdminDashboardPage() {
                   승인
                 </Button>
               </div>
+            ))}
+          </Card>
+        </section>
+      )}
+
+      {/* 프로필 미작성 회원 */}
+      {incompleteMembers.length > 0 && (
+        <section>
+          <h2 className="mb-2.5 text-lg font-extrabold text-navy-900">
+            프로필 미작성 회원
+          </h2>
+          <Card className="divide-y divide-navy-50">
+            {incompleteMembers.map(({ m, c }) => (
+              <Link
+                key={m._id}
+                to={`/members/${m._id}`}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-navy-50"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold text-navy-800">
+                    {m.name}
+                    {m.company ? ` · ${m.company}` : ''}
+                  </p>
+                  <p className="truncate text-xs text-navy-400">
+                    {c.missing
+                      .slice(0, 3)
+                      .map((f) => f.label)
+                      .join(', ')}{' '}
+                    미작성
+                  </p>
+                </div>
+                <span className="shrink-0 text-xs font-bold text-navy-500">
+                  {c.percent}%
+                </span>
+              </Link>
             ))}
           </Card>
         </section>

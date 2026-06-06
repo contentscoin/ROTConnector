@@ -1,7 +1,8 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
-import { requireMember, requireAdmin } from './auth'
+import { memberFromToken, requireMember, requireAdmin } from './auth'
+import { normalizeTags, termsOverlap } from './util'
 
 function normalizePhone(phone: string): string {
   return phone.replace(/[^0-9]/g, '')
@@ -153,6 +154,97 @@ export const facets = query({
   },
 })
 
+// 입력 자동완성용 태그 풀 (업종/도움 분야). 빈도순으로 인기 캐논 태그를 노출해 파편화 완화.
+export const tagPool = query({
+  args: {},
+  handler: async (ctx) => {
+    const members = await ctx.db.query('members').collect()
+    const industries = new Map<string, number>()
+    const helps = new Map<string, number>()
+    const bump = (mp: Map<string, number>, k: string) =>
+      mp.set(k, (mp.get(k) ?? 0) + 1)
+    for (const m of members) {
+      if (m.status !== 'active') continue
+      m.industry.forEach((i) => bump(industries, i))
+      m.helpOffer.forEach((h) => bump(helps, h))
+      m.helpNeed.forEach((h) => bump(helps, h))
+    }
+    const top = (mp: Map<string, number>) =>
+      [...mp.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko'))
+        .slice(0, 40)
+        .map(([t]) => t)
+    return { industries: top(industries), helps: top(helps) }
+  },
+})
+
+// 요청에 적합한 추천 helper (운영진 매칭 보조). category/tags/region ↔ helpOffer/industry/region 점수화.
+export const recommendForRequest = query({
+  args: {
+    token: v.optional(v.string()),
+    requestId: v.id('requests'),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { token, requestId, limit }) => {
+    await requireAdmin(ctx, token) // 운영진 매칭 보조 — 서버측 게이트
+    const req = await ctx.db.get(requestId)
+    if (!req) return []
+    const matches = await ctx.db
+      .query('matches')
+      .withIndex('by_request', (q) => q.eq('requestId', requestId))
+      .collect()
+    const excluded = new Set<string>([
+      req.authorId as string,
+      ...matches.map((m) => m.helperId as string),
+    ])
+    const reqTerms = [req.category, ...req.tags]
+    const members = await ctx.db.query('members').collect()
+    return members
+      .filter((m) => m.status === 'active' && !excluded.has(m._id as string))
+      .map((m) => {
+        const overlap = termsOverlap(reqTerms, [...m.helpOffer, ...m.industry])
+        const regionMatch = !!req.region && m.region === req.region
+        // 점수: 태그 겹침이 주, 지역/기여는 보조 가중(정렬용)
+        const score =
+          overlap * 10 +
+          (regionMatch ? 5 : 0) +
+          Math.min(m.contributionScore, 50) * 0.1
+        return { member: toPublicMember(m), score, overlap, regionMatch }
+      })
+      // 관련성 게이트: 태그 겹침 또는 지역 일치만 추천(순수 기여점수 패딩 제외)
+      .filter((s) => s.overlap > 0 || s.regionMatch)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit ?? 5)
+  },
+})
+
+// 홈 '추천 회원': 내 helpNeed/industry ↔ 상대 helpOffer/industry 매칭.
+export const recommendForMember = query({
+  args: { token: v.optional(v.string()), limit: v.optional(v.number()) },
+  handler: async (ctx, { token, limit }) => {
+    const me = await memberFromToken(ctx, token)
+    if (!me) return []
+    const myTerms = [...me.helpNeed, ...me.industry]
+    if (myTerms.length === 0) return []
+    const members = await ctx.db.query('members').collect()
+    return members
+      .filter((m) => m.status === 'active' && m._id !== me._id)
+      .map((m) => {
+        const overlap = termsOverlap(myTerms, [...m.helpOffer, ...m.industry])
+        const regionMatch = !!me.region && m.region === me.region
+        const score =
+          overlap * 10 +
+          (regionMatch ? 3 : 0) +
+          Math.min(m.contributionScore, 50) * 0.1
+        return { member: toPublicMember(m), score, overlap, regionMatch }
+      })
+      // 관련성 게이트: 태그 겹침 또는 지역 일치만(순수 기여점수 패딩 제외)
+      .filter((s) => s.overlap > 0 || s.regionMatch)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit ?? 5)
+  },
+})
+
 // 회원 등록 (운영진). 수동 MVP의 핵심.
 export const create = mutation({
   args: {
@@ -180,17 +272,26 @@ export const create = mutation({
       .withIndex('by_phone', (q) => q.eq('phone', phone))
       .unique()
     if (existing) throw new Error('이미 등록된 휴대폰 번호입니다.')
+    // update와 대칭: 태그 정규화 + 개수/길이 한도 검증
+    const industry = normalizeTags(args.industry ?? [])
+    const helpOffer = normalizeTags(args.helpOffer ?? [])
+    const helpNeed = normalizeTags(args.helpNeed ?? [])
+    for (const arr of [industry, helpOffer, helpNeed]) {
+      if (arr.length > MAX.arr || arr.some((sx) => sx.length > MAX.item)) {
+        throw new Error('태그 개수/길이가 한도를 초과했습니다.')
+      }
+    }
     return await ctx.db.insert('members', {
       name,
       phone,
       cohort: args.cohort,
       company: args.company,
       title: args.title,
-      industry: args.industry ?? [],
+      industry,
       region: args.region,
       intro: args.intro,
-      helpOffer: args.helpOffer ?? [],
-      helpNeed: args.helpNeed ?? [],
+      helpOffer,
+      helpNeed,
       links: [],
       isAdmin: args.isAdmin ?? false,
       status: 'active',
@@ -245,6 +346,10 @@ export const update = mutation({
       }
     }
     if (patch.links !== undefined) assertSafeLinks(patch.links)
+    // 태그 정규화 (파편화 완화)
+    for (const key of ['industry', 'helpOffer', 'helpNeed'] as const) {
+      if (patch[key] !== undefined) patch[key] = normalizeTags(patch[key])
+    }
     // undefined 키 제거
     const clean = Object.fromEntries(
       Object.entries(patch).filter(([, val]) => val !== undefined),

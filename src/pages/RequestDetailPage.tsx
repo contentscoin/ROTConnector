@@ -44,6 +44,10 @@ export function RequestDetailPage() {
   const req = useQuery(api.requests.get, { id: requestId })
   const matches = useQuery(api.matches.listByRequest, { requestId })
   const members = useQuery(api.members.list, isAdmin ? {} : 'skip')
+  const recommended = useQuery(
+    api.members.recommendForRequest,
+    isAdmin && token ? { token, requestId } : 'skip',
+  )
 
   const setReqStatus = useMutation(api.requests.setStatus)
   const propose = useMutation(api.matches.propose)
@@ -332,6 +336,30 @@ export function RequestDetailPage() {
             회원 연결 (운영진)
           </p>
           <div className="space-y-2">
+            {recommended && recommended.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-navy-500">
+                  추천 회원 (요청과 매칭도 높은 순)
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {recommended.map((r) => (
+                    <button
+                      key={r.member._id}
+                      type="button"
+                      onClick={() => setHelperId(r.member._id)}
+                      className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                        helperId === r.member._id
+                          ? 'border-navy-800 bg-navy-800 text-white'
+                          : 'border-navy-200 bg-white text-navy-600 hover:bg-navy-50'
+                      }`}
+                    >
+                      {r.member.name}
+                      {r.member.company ? ` · ${r.member.company}` : ''}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <Select value={helperId} onChange={(e) => setHelperId(e.target.value)}>
               <option value="">연결할 회원 선택</option>
               {members?.map((m) => (
