@@ -19,3 +19,8 @@ export function splitTags(input: string): string[] {
     .map((s) => s.trim())
     .filter(Boolean)
 }
+
+// 렌더 측 방어: http(s) 링크만 통과, 그 외(javascript: 등)는 무력화
+export function safeUrl(url: string): string | undefined {
+  return /^https?:\/\//i.test(url.trim()) ? url : undefined
+}

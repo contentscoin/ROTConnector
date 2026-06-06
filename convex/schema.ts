@@ -96,4 +96,11 @@ export default defineSchema({
     memberId: v.id('members'),
     createdAt: v.number(),
   }).index('by_token', ['token']),
+
+  // 로그인 브루트포스 완화용 슬라이딩 윈도우 카운터 (key=login:<phone>)
+  rateLimits: defineTable({
+    key: v.string(),
+    count: v.number(),
+    windowStart: v.number(),
+  }).index('by_key', ['key']),
 })

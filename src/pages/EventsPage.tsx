@@ -1,9 +1,31 @@
-import { useState } from 'react'
-import { useQuery } from 'convex/react'
-import { CalendarDays, MapPin, Building2, HandCoins } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
+import { useMutation, useQuery } from 'convex/react'
+import {
+  CalendarDays,
+  MapPin,
+  Building2,
+  HandCoins,
+  Plus,
+  Check,
+  Undo2,
+} from 'lucide-react'
 import { api } from '../../convex/_generated/api'
-import { Badge, Card, EmptyState, Spinner } from '../components/ui'
+import type { Id } from '../../convex/_generated/dataModel'
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  ShareButton,
+  Spinner,
+  Textarea,
+} from '../components/ui'
 import { formatDate } from '../lib/format'
+import { useSession } from '../lib/session'
+import { errorMessage } from '../lib/utils'
 
 type Filter = 'all' | 'event' | 'sponsor'
 const tabs: { key: Filter; label: string }[] = [
@@ -12,16 +34,158 @@ const tabs: { key: Filter; label: string }[] = [
   { key: 'sponsor', label: '후원' },
 ]
 
+const emptyForm = {
+  title: '',
+  kind: 'event' as 'event' | 'sponsor',
+  date: '',
+  place: '',
+  host: '',
+  body: '',
+}
+
 export function EventsPage() {
+  const { token, isAdmin } = useSession()
   const [filter, setFilter] = useState<Filter>('all')
   const events = useQuery(
     api.events.list,
     filter === 'all' ? {} : { kind: filter },
   )
+  const createEvent = useMutation(api.events.create)
+  const setEventStatus = useMutation(api.events.setStatus)
+
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState(emptyForm)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [actionBusy, setActionBusy] = useState(false)
+
+  async function onToggle(id: Id<'events'>, status: 'upcoming' | 'done') {
+    if (!token) return
+    setActionError(null)
+    setActionBusy(true)
+    try {
+      await setEventStatus({ token, id, status })
+    } catch (err) {
+      setActionError(errorMessage(err))
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  async function onCreate(e: FormEvent) {
+    e.preventDefault()
+    if (!token) return
+    setError(null)
+    setBusy(true)
+    try {
+      await createEvent({
+        token,
+        title: form.title.trim(),
+        kind: form.kind,
+        body: form.body.trim(),
+        date: form.date || undefined,
+        place: form.place.trim() || undefined,
+        host: form.host.trim() || undefined,
+      })
+      setForm(emptyForm)
+      setShowForm(false)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-extrabold text-navy-900">행사 · 후원</h1>
+
+      {actionError && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+          {actionError}
+        </p>
+      )}
+
+      {/* 운영진: 행사/후원 등록 */}
+      {isAdmin && (
+        <Card className="p-4">
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="flex w-full items-center gap-2 font-bold text-navy-800"
+          >
+            <Plus className="size-4" />
+            행사 · 후원 등록
+            <span className="ml-auto text-sm font-normal text-navy-400">
+              {showForm ? '닫기' : '열기'}
+            </span>
+          </button>
+          {showForm && (
+            <form onSubmit={onCreate} className="mt-3 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="제목" required>
+                  <Input
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  />
+                </Field>
+                <Field label="종류">
+                  <Select
+                    value={form.kind}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        kind: e.target.value as 'event' | 'sponsor',
+                      })
+                    }
+                  >
+                    <option value="event">행사</option>
+                    <option value="sponsor">후원</option>
+                  </Select>
+                </Field>
+                <Field label="일자">
+                  <Input
+                    type="date"
+                    value={form.date}
+                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  />
+                </Field>
+                <Field label="장소">
+                  <Input
+                    value={form.place}
+                    onChange={(e) => setForm({ ...form, place: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <Field label="주관">
+                <Input
+                  value={form.host}
+                  onChange={(e) => setForm({ ...form, host: e.target.value })}
+                />
+              </Field>
+              <Field label="내용">
+                <Textarea
+                  value={form.body}
+                  onChange={(e) => setForm({ ...form, body: e.target.value })}
+                />
+              </Field>
+              {error && (
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+                  {error}
+                </p>
+              )}
+              <Button
+                type="submit"
+                className="w-full"
+                loading={busy}
+                disabled={!form.title.trim()}
+              >
+                등록
+              </Button>
+            </form>
+          )}
+        </Card>
+      )}
 
       <div className="flex gap-2">
         {tabs.map((t) => (
@@ -67,9 +231,17 @@ export function EventsPage() {
                   )}
                   {e.kind === 'sponsor' ? '후원' : '행사'}
                 </Badge>
-                {e.status === 'upcoming' && (
+                {e.status === 'upcoming' ? (
                   <Badge className="bg-emerald-100 text-emerald-700">예정</Badge>
+                ) : (
+                  <Badge className="bg-navy-100 text-navy-400">종료</Badge>
                 )}
+                <ShareButton
+                  title={`${e.title} · 알비연 링크`}
+                  text={`[${e.kind === 'sponsor' ? '후원' : '행사'}] ${e.title}`}
+                  label=""
+                  className="ml-auto h-8 px-2"
+                />
               </div>
               <h2 className="text-lg font-extrabold text-navy-900">{e.title}</h2>
               <p className="mt-1.5 leading-relaxed whitespace-pre-wrap text-sm text-navy-600">
@@ -95,6 +267,33 @@ export function EventsPage() {
                   </span>
                 )}
               </div>
+              {isAdmin && token && (
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={actionBusy}
+                    onClick={() =>
+                      onToggle(
+                        e._id,
+                        e.status === 'upcoming' ? 'done' : 'upcoming',
+                      )
+                    }
+                  >
+                    {e.status === 'upcoming' ? (
+                      <>
+                        <Check className="size-4" />
+                        종료 처리
+                      </>
+                    ) : (
+                      <>
+                        <Undo2 className="size-4" />
+                        예정으로
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
             </Card>
           ))}
         </div>

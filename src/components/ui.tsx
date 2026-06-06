@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type {
   ButtonHTMLAttributes,
   HTMLAttributes,
@@ -6,7 +7,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Share2, Check } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 /* ---------- Button ---------- */
@@ -213,6 +214,64 @@ export function Select({
     <select className={cn(inputBase, 'appearance-none', className)} {...props}>
       {children}
     </select>
+  )
+}
+
+/* ---------- ShareButton ---------- */
+// 네이티브 공유시트(navigator.share, 모바일에서 카톡 선택 가능) → 미지원 시 클립보드 복사.
+export function ShareButton({
+  title,
+  text,
+  url,
+  label = '공유',
+  className,
+}: {
+  title: string
+  text?: string
+  url?: string
+  label?: string
+  className?: string
+}) {
+  const [copied, setCopied] = useState(false)
+
+  async function onShare() {
+    const shareUrl =
+      url ?? (typeof window !== 'undefined' ? window.location.href : '')
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title, text, url: shareUrl })
+      } catch {
+        // 사용자가 공유를 취소한 경우 등 — 무시
+      }
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(
+        `${text ? text + '\n' : ''}${shareUrl}`,
+      )
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    } catch {
+      // 클립보드 접근 불가 — 무시
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onShare}
+      className={cn(
+        'press inline-flex h-9 items-center gap-1.5 rounded-lg border border-navy-200 bg-white px-3 text-sm font-semibold text-navy-700 hover:bg-navy-50',
+        className,
+      )}
+    >
+      {copied ? (
+        <Check className="size-4 text-emerald-600" />
+      ) : (
+        <Share2 className="size-4" />
+      )}
+      {copied ? '복사됨' : label}
+    </button>
   )
 }
 

@@ -25,8 +25,9 @@ export const list = query({
   args: {
     status: v.optional(requestStatus),
     category: v.optional(v.string()),
+    q: v.optional(v.string()),
   },
-  handler: async (ctx, { status, category }) => {
+  handler: async (ctx, { status, category, q }) => {
     let requests: Doc<'requests'>[]
     if (status) {
       requests = await ctx.db
@@ -39,6 +40,15 @@ export const list = query({
     }
     if (category) {
       requests = requests.filter((r) => r.category === category)
+    }
+    if (q && q.trim()) {
+      const needle = q.trim().toLowerCase()
+      requests = requests.filter((r) =>
+        [r.title, r.body, r.category, ...r.tags]
+          .join(' ')
+          .toLowerCase()
+          .includes(needle),
+      )
     }
     return Promise.all(requests.map((r) => withAuthor(ctx, r)))
   },
@@ -125,10 +135,16 @@ export const setStatus = mutation({
     if (req.authorId !== me._id && !me.isAdmin) {
       throw new Error('작성자 또는 운영진만 상태를 변경할 수 있습니다.')
     }
-    // 게이밍 방지: '매칭중'·'연결완료'는 운영진만. 작성자는 '접수'/'종료'만.
-    if (!me.isAdmin && (status === 'matching' || status === 'connected')) {
-      throw new Error("'매칭중'·'연결완료'는 운영진만 변경할 수 있습니다.")
+    // 작성자(비운영진)는 open↔closed 토글만. 운영진이 설정한 매칭중/연결완료를
+    // 임의로 되돌리거나 매칭 단계로 점프할 수 없다.
+    if (!me.isAdmin) {
+      const allowed = req.status === 'open' || req.status === 'closed'
+      const target = status === 'open' || status === 'closed'
+      if (!allowed || !target) {
+        throw new Error("'매칭중'·'연결완료'는 운영진만 변경할 수 있습니다.")
+      }
     }
+    if (status === req.status) return null
     await ctx.db.patch(requestId, { status })
     return null
   },

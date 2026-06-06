@@ -9,6 +9,7 @@ import {
   UserCheck,
   UserPlus,
   Clock,
+  Award,
 } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -20,15 +21,31 @@ import {
   Field,
   Input,
   LoadingScreen,
+  Select,
 } from '../components/ui'
-import { requestStatusLabel, requestStatusTone, timeAgo } from '../lib/format'
+import {
+  contributionLabel,
+  requestStatusLabel,
+  requestStatusTone,
+  timeAgo,
+} from '../lib/format'
 import { errorMessage } from '../lib/utils'
+
+const contributionTypes = [
+  'sponsor',
+  'event',
+  'onboarding',
+  'intro',
+  'consult',
+] as const
 
 export function AdminDashboardPage() {
   const { token } = useSession()
   const data = useQuery(api.admin.dashboard, token ? { token } : 'skip')
+  const members = useQuery(api.members.list, token ? {} : 'skip')
   const approve = useMutation(api.members.approve)
   const createMember = useMutation(api.members.create)
+  const awardContribution = useMutation(api.contributions.award)
 
   const [showReg, setShowReg] = useState(false)
   const [reg, setReg] = useState({ name: '', phone: '', company: '', cohort: '' })
@@ -36,7 +53,39 @@ export function AdminDashboardPage() {
   const [regBusy, setRegBusy] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  const [showAward, setShowAward] = useState(false)
+  const [award, setAward] = useState({
+    memberId: '',
+    type: 'sponsor' as (typeof contributionTypes)[number],
+    points: '10',
+    note: '',
+  })
+  const [awardError, setAwardError] = useState<string | null>(null)
+  const [awardBusy, setAwardBusy] = useState(false)
+
   if (!data) return <LoadingScreen />
+
+  async function onAward(e: FormEvent) {
+    e.preventDefault()
+    if (!token) return
+    setAwardError(null)
+    setAwardBusy(true)
+    try {
+      await awardContribution({
+        token,
+        memberId: award.memberId as Id<'members'>,
+        type: award.type,
+        points: Number(award.points),
+        note: award.note.trim() || undefined,
+      })
+      setAward({ memberId: '', type: 'sponsor', points: '10', note: '' })
+      setShowAward(false)
+    } catch (err) {
+      setAwardError(errorMessage(err))
+    } finally {
+      setAwardBusy(false)
+    }
+  }
 
   const s = data.stats
 
@@ -158,6 +207,91 @@ export function AdminDashboardPage() {
               disabled={!reg.name.trim() || !reg.phone.trim()}
             >
               등록
+            </Button>
+          </form>
+        )}
+      </Card>
+
+      {/* 수동 기여 적립 (후원·행사 운영·온보딩 등) */}
+      <Card className="p-4">
+        <button
+          onClick={() => setShowAward((v) => !v)}
+          className="flex w-full items-center gap-2 font-bold text-navy-800"
+        >
+          <Award className="size-4" />
+          기여 적립
+          <span className="ml-auto text-sm font-normal text-navy-400">
+            {showAward ? '닫기' : '열기'}
+          </span>
+        </button>
+        {showAward && (
+          <form onSubmit={onAward} className="mt-3 space-y-3">
+            <Field label="회원" required>
+              <Select
+                value={award.memberId}
+                onChange={(e) =>
+                  setAward({ ...award, memberId: e.target.value })
+                }
+              >
+                <option value="">회원 선택</option>
+                {members?.map((m) => (
+                  <option key={m._id} value={m._id}>
+                    {m.name}
+                    {m.company ? ` (${m.company})` : ''}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="기여 유형">
+                <Select
+                  value={award.type}
+                  onChange={(e) =>
+                    setAward({
+                      ...award,
+                      type: e.target.value as (typeof contributionTypes)[number],
+                    })
+                  }
+                >
+                  {contributionTypes.map((t) => (
+                    <option key={t} value={t}>
+                      {contributionLabel[t]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="점수">
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={1000}
+                  value={award.points}
+                  onChange={(e) =>
+                    setAward({ ...award, points: e.target.value })
+                  }
+                />
+              </Field>
+            </div>
+            <Field label="메모">
+              <Input
+                placeholder="예) 6월 정기모임 후원"
+                value={award.note}
+                onChange={(e) => setAward({ ...award, note: e.target.value })}
+              />
+            </Field>
+            {awardError && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+                {awardError}
+              </p>
+            )}
+            <Button
+              type="submit"
+              className="w-full"
+              loading={awardBusy}
+              disabled={!award.memberId || !award.points}
+            >
+              적립
             </Button>
           </form>
         )}

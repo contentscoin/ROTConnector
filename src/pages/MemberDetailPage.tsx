@@ -12,9 +12,10 @@ import {
 } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
-import { Avatar, Badge, Card, LoadingScreen } from '../components/ui'
+import { Avatar, Badge, Card, LoadingScreen, ShareButton } from '../components/ui'
 import { RequestCard } from '../components/cards'
 import { contributionLabel, timeAgo } from '../lib/format'
+import { safeUrl } from '../lib/utils'
 
 export function MemberDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -41,13 +42,20 @@ export function MemberDetailPage() {
     <div className="space-y-5">
       {/* 히어로 헤더 */}
       <div className="-mx-4 -mt-4 rounded-b-[2rem] bg-gradient-to-br from-navy-800 to-navy-950 px-5 pt-3 pb-7 text-white shadow-soft">
-        <button
-          onClick={() => navigate(-1)}
-          aria-label="뒤로"
-          className="press -ml-1 flex size-9 items-center justify-center rounded-full text-white/80 hover:bg-white/10"
-        >
-          <ChevronLeft className="size-5" />
-        </button>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => navigate(-1)}
+            aria-label="뒤로"
+            className="press -ml-1 flex size-9 items-center justify-center rounded-full text-white/80 hover:bg-white/10"
+          >
+            <ChevronLeft className="size-5" />
+          </button>
+          <ShareButton
+            title={`${member.name} · 알비연 링크`}
+            text={`${member.name}${member.company ? ` (${member.company})` : ''} 님의 프로필`}
+            className="border-white/20 bg-white/10 text-white hover:bg-white/15"
+          />
+        </div>
         <div className="mt-1 flex flex-col items-center text-center">
           <div className="rounded-full p-1 ring-2 ring-white/25">
             <Avatar name={member.name} size="lg" />
@@ -108,18 +116,32 @@ export function MemberDetailPage() {
           )}
           {member.links.length > 0 && (
             <div className="space-y-1.5">
-              {member.links.map((l, idx) => (
-                <a
-                  key={idx}
-                  href={l.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1.5 text-sm font-semibold text-navy-600"
-                >
-                  <ExternalLink className="size-4" />
-                  {l.label || l.url}
-                </a>
-              ))}
+              {member.links.map((l, idx) => {
+                const href = safeUrl(l.url)
+                // 안전하지 않은 스킴(javascript: 등)은 클릭 불가 텍스트로 표기
+                if (!href)
+                  return (
+                    <span
+                      key={idx}
+                      className="flex items-center gap-1.5 text-sm font-semibold text-navy-300"
+                    >
+                      <ExternalLink className="size-4" />
+                      {l.label || l.url}
+                    </span>
+                  )
+                return (
+                  <a
+                    key={idx}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-sm font-semibold text-navy-600"
+                  >
+                    <ExternalLink className="size-4" />
+                    {l.label || l.url}
+                  </a>
+                )
+              })}
             </div>
           )}
         </Card>

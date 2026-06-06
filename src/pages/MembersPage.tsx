@@ -12,12 +12,14 @@ export function MembersPage() {
   const [q, setQ] = useState('')
   const [industry, setIndustry] = useState<string | null>(null)
   const [region, setRegion] = useState<string | null>(null)
+  const [helpOffer, setHelpOffer] = useState<string | null>(null)
 
   const facets = useQuery(api.members.facets, {})
   const members = useQuery(api.members.list, {
     q: q || undefined,
     industry: industry || undefined,
     region: region || undefined,
+    helpOffer: helpOffer || undefined,
   })
 
   return (
@@ -97,6 +99,24 @@ export function MembersPage() {
               onClick={() => setRegion(region === r ? null : r)}
             >
               {r}
+            </Chip>
+          ))}
+        </div>
+      )}
+
+      {/* 도움분야 필터 ('누가 어떤 도움을 줄 수 있는가' — 핵심 가치제안) */}
+      {facets && facets.helpOffers.length > 0 && (
+        <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+          <Chip active={!helpOffer} onClick={() => setHelpOffer(null)}>
+            전체 도움분야
+          </Chip>
+          {facets.helpOffers.map((h) => (
+            <Chip
+              key={h}
+              active={helpOffer === h}
+              onClick={() => setHelpOffer(helpOffer === h ? null : h)}
+            >
+              {h}
             </Chip>
           ))}
         </div>

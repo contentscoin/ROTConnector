@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
-import { MapPin, Clock, Award, ChevronRight } from 'lucide-react'
+import { MapPin, Clock, Award, ChevronRight, Check } from 'lucide-react'
+import type { FunctionReturnType } from 'convex/server'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
+import { api } from '../../convex/_generated/api'
 import { Avatar, Badge, Card } from './ui'
 import {
   requestStatusLabel,
@@ -9,6 +11,10 @@ import {
   urgencyTone,
   timeAgo,
 } from '../lib/format'
+import { cn } from '../lib/utils'
+
+// 공개 디렉토리 projection 타입 (phone 등 비공개 필드 제외)
+export type PublicMember = FunctionReturnType<typeof api.members.list>[number]
 
 type Author = {
   _id: Id<'members'>
@@ -72,7 +78,7 @@ export function RequestCard({ req }: { req: RequestItem }) {
   )
 }
 
-export function MemberCard({ member }: { member: Doc<'members'> }) {
+export function MemberCard({ member }: { member: PublicMember }) {
   return (
     <Link to={`/members/${member._id}`} className="press block">
       <Card className="flex items-center gap-3.5 p-3.5 hover:shadow-soft">
@@ -118,5 +124,64 @@ export function MemberCard({ member }: { member: Doc<'members'> }) {
         <ChevronRight className="size-4 shrink-0 text-navy-300" />
       </Card>
     </Link>
+  )
+}
+
+// 요청 라이프사이클 진행 스테퍼 (접수 → 매칭중 → 연결완료). closed는 별도 표기.
+const STEPPER = [
+  { key: 'open', label: '접수' },
+  { key: 'matching', label: '매칭중' },
+  { key: 'connected', label: '연결완료' },
+] as const
+
+export function RequestStepper({ status }: { status: Doc<'requests'>['status'] }) {
+  if (status === 'closed') {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-xl bg-navy-100 px-4 py-2.5 text-sm font-semibold text-navy-500">
+        <span className="size-2 rounded-full bg-navy-400" />
+        종료된 요청입니다
+      </div>
+    )
+  }
+  const current = STEPPER.findIndex((s) => s.key === status)
+  return (
+    <div className="flex items-center">
+      {STEPPER.map((step, i) => {
+        const done = i < current
+        const active = i === current
+        return (
+          <div key={step.key} className="flex flex-1 items-center last:flex-none">
+            <div className="flex flex-col items-center gap-1">
+              <span
+                className={cn(
+                  'flex size-7 items-center justify-center rounded-full text-xs font-bold transition-colors',
+                  done && 'bg-navy-700 text-white',
+                  active && 'bg-navy-800 text-white ring-4 ring-navy-100',
+                  !done && !active && 'bg-navy-100 text-navy-400',
+                )}
+              >
+                {done ? <Check className="size-4" /> : i + 1}
+              </span>
+              <span
+                className={cn(
+                  'text-[11px] font-semibold whitespace-nowrap',
+                  active || done ? 'text-navy-800' : 'text-navy-400',
+                )}
+              >
+                {step.label}
+              </span>
+            </div>
+            {i < STEPPER.length - 1 && (
+              <span
+                className={cn(
+                  'mx-1 -mt-4 h-0.5 flex-1 rounded transition-colors',
+                  i < current ? 'bg-navy-700' : 'bg-navy-100',
+                )}
+              />
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }

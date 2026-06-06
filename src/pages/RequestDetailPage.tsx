@@ -8,6 +8,7 @@ import {
   UserPlus,
   CheckCircle2,
   Trash2,
+  Undo2,
 } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -19,7 +20,9 @@ import {
   Card,
   LoadingScreen,
   Select,
+  ShareButton,
 } from '../components/ui'
+import { RequestStepper } from '../components/cards'
 import {
   matchStatusLabel,
   requestStatusLabel,
@@ -66,7 +69,11 @@ export function RequestDetailPage() {
       </div>
     )
 
-  const canEditStatus = isAdmin || (member && member._id === req.authorId)
+  const isAuthor = !!member && member._id === req.authorId
+  // 작성자는 open/closed 상태일 때만 토글 가능 (운영진이 설정한 매칭중/연결완료는 못 되돌림)
+  const authorCanEdit =
+    isAuthor && (req.status === 'open' || req.status === 'closed')
+  const canEditStatus = isAdmin || authorCanEdit
   // 작성자는 접수/종료만, 운영진은 전체
   const editableStatuses = isAdmin
     ? reqStatuses
@@ -86,13 +93,22 @@ export function RequestDetailPage() {
 
   return (
     <div className="space-y-5">
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-1 text-sm font-semibold text-navy-500"
-      >
-        <ChevronLeft className="size-4" />
-        뒤로
-      </button>
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-1 text-sm font-semibold text-navy-500"
+        >
+          <ChevronLeft className="size-4" />
+          뒤로
+        </button>
+        <ShareButton
+          title={`${req.title} · 알비연 링크`}
+          text={`[도움요청] ${req.title}`}
+        />
+      </div>
+
+      {/* 진행 단계 */}
+      <RequestStepper status={req.status} />
 
       {/* 요청 본문 */}
       <Card className="p-5">
@@ -275,6 +291,30 @@ export function RequestDetailPage() {
                       aria-label="매칭 삭제"
                     >
                       <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* 완료된 매칭: 잘못 완료한 경우 취소(삭제) → 적립 점수 자동 회수 */}
+                {isAdmin && m.status === 'done' && (
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            '연결 완료를 취소하고 적립된 기여 점수를 회수합니다. 계속할까요?',
+                          )
+                        )
+                          return
+                        guard(() =>
+                          removeMatch({ token: token!, matchId: m._id }),
+                        )
+                      }}
+                      disabled={busy}
+                      className="press inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold text-navy-400 hover:text-red-500"
+                    >
+                      <Undo2 className="size-3.5" />
+                      완료 취소
                     </button>
                   </div>
                 )}

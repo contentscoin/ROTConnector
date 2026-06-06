@@ -77,11 +77,10 @@ export function LoginPage() {
       <div className="mt-4 flex gap-2 rounded-xl bg-navy-100/60 p-3 text-xs text-navy-500">
         <Info className="size-4 shrink-0 text-navy-400" />
         <div>
-          <p className="font-semibold text-navy-600">데모 계정</p>
-          <p>운영진: 010-1111-0000 (김도현)</p>
-          <p>회원: 010-2222-0001 (이상훈) 등</p>
+          <p className="font-semibold text-navy-600">로그인 안내</p>
           <p className="mt-1">
-            등록되지 않은 번호는 운영진이 먼저 회원 등록을 해야 합니다.
+            운영진이 등록한 회원 휴대폰 번호로 로그인할 수 있습니다. 등록되지
+            않은 번호는 알비연 운영진에게 가입을 요청해주세요.
           </p>
         </div>
       </div>

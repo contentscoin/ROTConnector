@@ -43,3 +43,17 @@ export const create = mutation({
     })
   },
 })
+
+// 운영진: 행사 상태 토글 (upcoming ↔ done)
+export const setStatus = mutation({
+  args: {
+    token: v.string(),
+    id: v.id('events'),
+    status: v.union(v.literal('upcoming'), v.literal('done')),
+  },
+  handler: async (ctx, { token, id, status }) => {
+    await requireAdmin(ctx, token)
+    await ctx.db.patch(id, { status })
+    return null
+  },
+})

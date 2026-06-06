@@ -1,11 +1,11 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
-import type { Id } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
 import { matchStatus, contributionType } from './schema'
 import { requireAdmin } from './auth'
 
-// 기여 적립 + 회원 점수 가산 (내부 헬퍼)
+// 기여 적립 + 회원 점수 가산 (내부 헬퍼). refId에 matchId를 넣어 롤백 추적.
 async function award(
   ctx: MutationCtx,
   memberId: Id<'members'>,
@@ -33,6 +33,48 @@ async function award(
   }
 }
 
+// 특정 매칭에 적립된 기여를 역적립(롤백). remove(done 매칭) 시 점수 고립 방지.
+async function rollbackMatchContributions(ctx: MutationCtx, match: Doc<'matches'>) {
+  const memberIds = [match.helperId, match.brokeredBy].filter(
+    (id): id is Id<'members'> => !!id,
+  )
+  for (const mid of memberIds) {
+    const contribs = await ctx.db
+      .query('contributions')
+      .withIndex('by_member', (q) => q.eq('memberId', mid))
+      .collect()
+    for (const c of contribs) {
+      if (c.refId === (match._id as string)) {
+        await ctx.db.delete(c._id)
+        const member = await ctx.db.get(mid)
+        if (member) {
+          await ctx.db.patch(mid, {
+            contributionScore: Math.max(0, member.contributionScore - c.points),
+          })
+        }
+      }
+    }
+  }
+}
+
+// 매칭 변동 후 요청 상태를 매칭 현황에서 재계산. closed(종료)는 terminal이라 건드리지 않음.
+async function recomputeRequestStatus(
+  ctx: MutationCtx,
+  requestId: Id<'requests'>,
+) {
+  const req = await ctx.db.get(requestId)
+  if (!req || req.status === 'closed') return
+  const matches = await ctx.db
+    .query('matches')
+    .withIndex('by_request', (q) => q.eq('requestId', requestId))
+    .collect()
+  let next: Doc<'requests'>['status']
+  if (matches.some((m) => m.status === 'done')) next = 'connected'
+  else if (matches.length > 0) next = 'matching'
+  else next = 'open'
+  if (next !== req.status) await ctx.db.patch(requestId, { status: next })
+}
+
 // 특정 요청의 매칭 목록 (helper/broker 요약 포함)
 export const listByRequest = query({
   args: { requestId: v.id('requests') },
@@ -58,7 +100,7 @@ export const listByRequest = query({
   },
 })
 
-// 운영진: helper를 요청에 제안 → 요청 상태 matching
+// 운영진: helper를 요청에 제안 → 요청 상태 재계산(matching)
 export const propose = mutation({
   args: {
     token: v.string(),
@@ -70,6 +112,24 @@ export const propose = mutation({
     const admin = await requireAdmin(ctx, token)
     const req = await ctx.db.get(requestId)
     if (!req) throw new Error('요청을 찾을 수 없습니다.')
+    if (req.status === 'closed') {
+      throw new Error('종료된 요청에는 회원을 연결할 수 없습니다.')
+    }
+    if (helperId === req.authorId) {
+      throw new Error('요청 작성자 본인은 연결 대상이 될 수 없습니다.')
+    }
+    const helper = await ctx.db.get(helperId)
+    if (!helper || helper.status !== 'active') {
+      throw new Error('유효한 활성 회원만 연결할 수 있습니다.')
+    }
+    // 동일 (요청, helper) 중복 매칭 차단 → 중복 기여 적립 방지
+    const existingMatches = await ctx.db
+      .query('matches')
+      .withIndex('by_request', (q) => q.eq('requestId', requestId))
+      .collect()
+    if (existingMatches.some((m) => m.helperId === helperId)) {
+      throw new Error('이미 이 요청에 연결된 회원입니다.')
+    }
     const matchId = await ctx.db.insert('matches', {
       requestId,
       helperId,
@@ -78,9 +138,7 @@ export const propose = mutation({
       note,
       createdAt: Date.now(),
     })
-    if (req.status === 'open') {
-      await ctx.db.patch(requestId, { status: 'matching' })
-    }
+    await recomputeRequestStatus(ctx, requestId)
     return matchId
   },
 })
@@ -89,6 +147,14 @@ export const setStatus = mutation({
   args: { token: v.string(), matchId: v.id('matches'), status: matchStatus },
   handler: async (ctx, { token, matchId, status }) => {
     await requireAdmin(ctx, token)
+    const match = await ctx.db.get(matchId)
+    if (!match) throw new Error('매칭을 찾을 수 없습니다.')
+    // 'done' 전이는 complete()로만 (기여 적립 보장). 또한 이미 done인 매칭은
+    // setStatus로 되돌릴 수 없다 — 되돌리면 complete 멱등성 우회(중복 적립) +
+    // 요청 상태 desync가 발생한다. done 취소는 remove(롤백 동반)로만.
+    if (status === 'done' || match.status === 'done') {
+      throw new Error("'완료' 처리는 완료 버튼으로, 취소는 삭제로만 가능합니다.")
+    }
     await ctx.db.patch(matchId, { status })
     return null
   },
@@ -104,13 +170,18 @@ export const complete = mutation({
     contribution: v.optional(contributionType),
   },
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx, args.token)
+    await requireAdmin(ctx, args.token)
     const match = await ctx.db.get(args.matchId)
     if (!match) throw new Error('매칭을 찾을 수 없습니다.')
     // 멱등성: 이미 완료된 매칭에 중복 적립 방지
     if (match.status === 'done') throw new Error('이미 완료된 매칭입니다.')
+    const req = await ctx.db.get(match.requestId)
+    if (!req) throw new Error('요청을 찾을 수 없습니다.')
+    // 종료(closed) 요청은 되살리지 않음 — 상태 역행 차단
+    if (req.status === 'closed') {
+      throw new Error('종료된 요청입니다. 먼저 요청을 다시 여세요.')
+    }
     await ctx.db.patch(args.matchId, { status: 'done' })
-    await ctx.db.patch(match.requestId, { status: 'connected' })
 
     const helperPoints = args.helperPoints ?? 10
     await award(
@@ -118,14 +189,15 @@ export const complete = mutation({
       match.helperId,
       args.contribution ?? 'consult',
       helperPoints,
-      match.requestId,
+      args.matchId,
       '연결 완료',
     )
-    const brokerId = match.brokeredBy ?? admin._id
+    // broker 적립은 match.brokeredBy 기준으로만 (rollback이 동일 대상을 찾도록 대칭 유지)
     const brokerPoints = args.brokerPoints ?? 5
-    if (brokerPoints > 0) {
-      await award(ctx, brokerId, 'intro', brokerPoints, match.requestId, '중개')
+    if (match.brokeredBy && brokerPoints > 0) {
+      await award(ctx, match.brokeredBy, 'intro', brokerPoints, args.matchId, '중개')
     }
+    await recomputeRequestStatus(ctx, match.requestId)
     return null
   },
 })
@@ -134,7 +206,15 @@ export const remove = mutation({
   args: { token: v.string(), matchId: v.id('matches') },
   handler: async (ctx, { token, matchId }) => {
     await requireAdmin(ctx, token)
+    const match = await ctx.db.get(matchId)
+    if (!match) return null
+    // done 매칭 삭제 시 적립 점수 롤백 (점수 고립/중복적립 방지)
+    if (match.status === 'done') {
+      await rollbackMatchContributions(ctx, match)
+    }
     await ctx.db.delete(matchId)
+    // 남은 매칭으로 요청 상태 재계산 (0건이면 open으로 환원)
+    await recomputeRequestStatus(ctx, match.requestId)
     return null
   },
 })

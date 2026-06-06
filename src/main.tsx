@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import { SessionProvider } from './lib/session'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL as string
 if (!convexUrl) {
@@ -14,12 +15,14 @@ const convex = new ConvexReactClient(convexUrl)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ConvexProvider client={convex}>
-      <BrowserRouter>
-        <SessionProvider>
-          <App />
-        </SessionProvider>
-      </BrowserRouter>
-    </ConvexProvider>
+    <ErrorBoundary>
+      <ConvexProvider client={convex}>
+        <BrowserRouter>
+          <SessionProvider>
+            <App />
+          </SessionProvider>
+        </BrowserRouter>
+      </ConvexProvider>
+    </ErrorBoundary>
   </StrictMode>,
 )

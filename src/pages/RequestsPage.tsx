@@ -1,54 +1,151 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from 'convex/react'
-import { Plus, Inbox } from 'lucide-react'
+import { Plus, Inbox, Search, X } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
-import { Chip, EmptyState, SkeletonList } from '../components/ui'
+import { Chip, EmptyState, Input, SkeletonList } from '../components/ui'
 import { RequestCard } from '../components/cards'
+import { useSession } from '../lib/session'
 
-type StatusFilter = 'all' | 'open' | 'matching' | 'connected'
+type StatusFilter = 'all' | 'open' | 'matching' | 'connected' | 'closed'
 
-const filters: { key: StatusFilter; label: string }[] = [
+const statusFilters: { key: StatusFilter; label: string }[] = [
   { key: 'all', label: '전체' },
   { key: 'open', label: '접수' },
   { key: 'matching', label: '매칭중' },
   { key: 'connected', label: '연결완료' },
+  { key: 'closed', label: '종료' },
 ]
 
+const categories = [
+  '투자',
+  '영업',
+  '채용',
+  '법률',
+  '세무/회계',
+  '마케팅',
+  '제휴',
+  '해외',
+  '부동산',
+  '물류',
+  '기타',
+]
+
+const urgencyRank: Record<string, number> = { high: 0, normal: 1, low: 2 }
+
 export function RequestsPage() {
-  const [filter, setFilter] = useState<StatusFilter>('all')
-  const requests = useQuery(
-    api.requests.list,
-    filter === 'all' ? {} : { status: filter },
-  )
+  const { member } = useSession()
+  const [status, setStatus] = useState<StatusFilter>('all')
+  const [category, setCategory] = useState<string | null>(null)
+  const [q, setQ] = useState('')
+  const [mineOnly, setMineOnly] = useState(false)
+  const [sort, setSort] = useState<'recent' | 'urgent'>('recent')
+
+  const requests = useQuery(api.requests.list, {
+    status: status === 'all' ? undefined : status,
+    category: category || undefined,
+    q: q || undefined,
+  })
+
+  // list는 createdAt desc 고정 → mine 필터 + 긴급도 정렬만 클라이언트에서.
+  const visible = requests
+    ? requests
+        .filter((r) => !mineOnly || (member && r.authorId === member._id))
+        .slice()
+        .sort((a, b) =>
+          sort === 'urgent'
+            ? (urgencyRank[a.urgency] ?? 9) - (urgencyRank[b.urgency] ?? 9)
+            : 0,
+        )
+    : undefined
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-extrabold text-navy-900">도움요청</h1>
 
+      {/* 검색 */}
+      <div className="relative">
+        <Search className="absolute top-1/2 left-3.5 size-4.5 -translate-y-1/2 text-navy-400" />
+        <Input
+          className="pl-10"
+          placeholder="제목, 내용, 태그 검색"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        {q && (
+          <button
+            onClick={() => setQ('')}
+            className="absolute top-1/2 right-3 -translate-y-1/2 text-navy-400"
+            aria-label="검색어 지우기"
+          >
+            <X className="size-4.5" />
+          </button>
+        )}
+      </div>
+
+      {/* 상태 필터 */}
       <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
-        {filters.map((f) => (
+        {statusFilters.map((f) => (
           <Chip
             key={f.key}
-            active={filter === f.key}
-            onClick={() => setFilter(f.key)}
+            active={status === f.key}
+            onClick={() => setStatus(f.key)}
           >
             {f.label}
           </Chip>
         ))}
       </div>
 
-      {requests === undefined ? (
+      {/* 카테고리 필터 */}
+      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+        <Chip active={!category} onClick={() => setCategory(null)}>
+          전체 분류
+        </Chip>
+        {categories.map((c) => (
+          <Chip
+            key={c}
+            active={category === c}
+            onClick={() => setCategory(category === c ? null : c)}
+          >
+            {c}
+          </Chip>
+        ))}
+      </div>
+
+      {/* 내 요청 / 정렬 */}
+      <div className="flex items-center justify-between">
+        {member ? (
+          <Chip active={mineOnly} onClick={() => setMineOnly((v) => !v)}>
+            내 요청만
+          </Chip>
+        ) : (
+          <span />
+        )}
+        <div className="flex gap-2">
+          <Chip active={sort === 'recent'} onClick={() => setSort('recent')}>
+            최신순
+          </Chip>
+          <Chip active={sort === 'urgent'} onClick={() => setSort('urgent')}>
+            긴급순
+          </Chip>
+        </div>
+      </div>
+
+      {visible === undefined ? (
         <SkeletonList count={5} />
-      ) : requests.length === 0 ? (
+      ) : visible.length === 0 ? (
         <EmptyState
           icon={<Inbox className="size-10" />}
           title="도움요청이 없습니다"
-          description="첫 도움요청을 등록해보세요."
+          description={
+            mineOnly
+              ? '아직 등록한 도움요청이 없습니다.'
+              : '조건에 맞는 요청이 없습니다.'
+          }
         />
       ) : (
         <div className="space-y-2.5">
-          {requests.map((r) => (
+          {visible.map((r) => (
             <RequestCard key={r._id} req={r} />
           ))}
         </div>

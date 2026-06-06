@@ -371,7 +371,8 @@ export const run = internalMutation({
       skipped: false,
       members: seedMembers.length,
       requests: reqs.length,
-      admin: { phone: '01011110000', name: '김도현' },
+      // 운영진 로그인 phone은 반환에 노출하지 않음(로그는 convex 콘솔에 남음).
+      admin: { name: '김도현' },
     }
   },
 })

@@ -9,11 +9,17 @@ import type { Doc, Id } from './_generated/dataModel'
  * 이 파일 하나로 인증을 격리한다. Phase 2: Convex Auth(Password/OTP)/카카오 OAuth로 교체.
  */
 
+// 세션 수명 (30일). 만료된 토큰은 무효 처리.
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
+// 로그인 레이트리밋: 10분 윈도우당 최대 8회.
+const LOGIN_WINDOW_MS = 10 * 60 * 1000
+const LOGIN_MAX_ATTEMPTS = 8
+
 function normalizePhone(phone: string): string {
   return phone.replace(/[^0-9]/g, '')
 }
 
-// 토큰으로 회원 조회 (없으면 null)
+// 토큰으로 회원 조회 (없거나 만료면 null)
 export async function memberFromToken(
   ctx: QueryCtx,
   token: string | undefined | null,
@@ -24,6 +30,8 @@ export async function memberFromToken(
     .withIndex('by_token', (q) => q.eq('token', token))
     .unique()
   if (!session) return null
+  // 만료 검사 (QueryCtx라 삭제는 불가 — null 반환으로 무효화)
+  if (Date.now() - session.createdAt > SESSION_TTL_MS) return null
   return await ctx.db.get(session.memberId)
 }
 
@@ -60,6 +68,27 @@ async function createSession(
   return token
 }
 
+// 슬라이딩 윈도우 레이트리밋. 한도 초과 시 throw.
+async function enforceRateLimit(ctx: MutationCtx, key: string): Promise<void> {
+  const now = Date.now()
+  const existing = await ctx.db
+    .query('rateLimits')
+    .withIndex('by_key', (q) => q.eq('key', key))
+    .unique()
+  if (!existing || now - existing.windowStart > LOGIN_WINDOW_MS) {
+    if (existing) {
+      await ctx.db.patch(existing._id, { count: 1, windowStart: now })
+    } else {
+      await ctx.db.insert('rateLimits', { key, count: 1, windowStart: now })
+    }
+    return
+  }
+  if (existing.count >= LOGIN_MAX_ATTEMPTS) {
+    throw new Error('로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.')
+  }
+  await ctx.db.patch(existing._id, { count: existing.count + 1 })
+}
+
 // phone으로 본인 프로필 claim → 세션 토큰
 export const login = mutation({
   args: { phone: v.string() },
@@ -68,6 +97,8 @@ export const login = mutation({
     if (normalized.length < 9) {
       throw new Error('올바른 휴대폰 번호를 입력해주세요.')
     }
+    // phone당 브루트포스 완화 (공개 디렉토리에서 phone projection이 제거됐어도 방어심층)
+    await enforceRateLimit(ctx, `login:${normalized}`)
     const member = await ctx.db
       .query('members')
       .withIndex('by_phone', (q) => q.eq('phone', normalized))
@@ -78,7 +109,8 @@ export const login = mutation({
       )
     }
     const token = await createSession(ctx, member._id)
-    return { token, memberId: member._id, isAdmin: member.isAdmin }
+    // isAdmin은 응답에 싣지 않는다(열거 시 관리자 여부 노출 방지). 클라이언트는 auth.me로 조회.
+    return { token }
   },
 })
 

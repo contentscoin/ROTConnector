@@ -8,9 +8,8 @@
 ## 라이브
 
 - **웹앱**: https://rotconnector.vercel.app
-- **데모 계정**
-  - 운영진: `010-1111-0000` (김도현)
-  - 회원: `010-2222-0001` (이상훈) 등
+- **로그인**: 운영진이 등록한 회원 휴대폰 번호로 클레임 로그인.
+  데모/운영 계정 번호는 보안상 공개하지 않습니다(시드 데이터는 `convex/seed.ts` 참고, 운영 배포 시 교체).
 
 ## 스택
 
@@ -56,10 +55,17 @@ npx cap open ios    # / android
 웹앱(dist)을 그대로 네이티브 래핑. `capacitor.config.ts` 이미 존재 (appId: `kr.albiyeon.link`).
 릴리스 빌드는 `.env.production`의 prod Convex URL 사용.
 
-## 알려진 한계 (Phase 2 하드닝)
+## 보안 / 알려진 한계
 
-- **인증**: 파일럿 등급 phone-claim 세션(세션 만료 없음). → Convex Auth(Password/OTP) 또는 카카오 OAuth로 교체 예정. (`convex/auth.ts` 한 곳에 격리)
-- 요청 상태 `closed` 수동 전환, 다중 매칭 시 상태 머신 단순화.
+1차 하드닝 반영:
+- **PII 격리**: 공개 회원 쿼리(`members.list/get`)는 phone 등 비공개 필드를 projection으로 제거. 전체 PII는 본인(`auth.me`)·운영진(`admin.dashboard`)에서만 노출.
+- **세션**: 30일 만료(`convex/auth.ts`), 무효 토큰은 클라이언트에서 자동 정리(유령 세션 트랩 제거).
+- **로그인**: phone당 슬라이딩 윈도우 레이트리밋(브루트포스 완화).
+- **저장형 XSS 차단**: 회원 링크 URL은 `http(s)` 스킴만 허용(서버·렌더 양측 검증).
+- **상태머신**: 요청 상태를 매칭 현황에서 재계산, `complete`/`propose`가 종료(closed) 요청을 되살리지 않음, 매칭 삭제 시 기여 점수 롤백.
+
+Phase 2 잔여(여전히 `convex/auth.ts` 한 곳에 격리):
+- **인증 정공법**: phone-claim은 단일요소라 SMS OTP 또는 카카오 OAuth로 교체 예정(`requestOtp`/`verifyOtp` 분리).
 - 운영진 대시보드의 회원 연락처(PII)는 운영 목적상 노출 (admin 권한 게이트).
 
 ## 코드 리뷰
