@@ -4,6 +4,7 @@ import type { QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { requestStatus } from './schema'
 import { memberFromToken, requireMember } from './auth'
+import { normalizeTags } from './util'
 
 // 작성자 요약을 붙여서 반환
 async function withAuthor(ctx: QueryCtx, req: Doc<'requests'>) {
@@ -112,12 +113,28 @@ export const create = mutation({
       title,
       body,
       category: args.category,
-      tags: args.tags ?? [],
+      tags: normalizeTags(args.tags ?? []),
       region: args.region,
       urgency: args.urgency ?? 'normal',
       status: 'open',
       createdAt: Date.now(),
     })
+  },
+})
+
+// 요청 태그 자동완성 풀 (빈도 상위)
+export const tagSuggestions = query({
+  args: {},
+  handler: async (ctx) => {
+    const requests = await ctx.db.query('requests').collect()
+    const count = new Map<string, number>()
+    for (const r of requests) {
+      for (const t of r.tags) count.set(t, (count.get(t) ?? 0) + 1)
+    }
+    return [...count.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko'))
+      .slice(0, 15)
+      .map(([t]) => t)
   },
 })
 

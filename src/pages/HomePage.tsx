@@ -7,11 +7,14 @@ import {
   CalendarDays,
   Award,
   ChevronRight,
+  UserPlus,
 } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { Card, Spinner } from '../components/ui'
-import { RequestCard } from '../components/cards'
+import { RequestCard, MemberCard } from '../components/cards'
 import { formatDate } from '../lib/format'
+import { useSession } from '../lib/session'
+import { profileCompleteness } from '../lib/profile'
 
 const actions = [
   { to: '/requests/new', label: '도움요청 등록', icon: PlusCircle },
@@ -21,14 +24,20 @@ const actions = [
 ]
 
 export function HomePage() {
+  const { token, member } = useSession()
   const requests = useQuery(api.requests.list, {})
   const leaders = useQuery(api.contributions.leaderboard, { limit: 5 })
   const events = useQuery(api.events.list, {})
+  const recommended = useQuery(
+    api.members.recommendForMember,
+    token ? { token } : 'skip',
+  )
 
   const recent = requests
     ?.filter((r) => r.status === 'open' || r.status === 'matching')
     .slice(0, 4)
   const upcoming = events?.filter((e) => e.status === 'upcoming').slice(0, 2)
+  const completeness = member ? profileCompleteness(member) : null
 
   return (
     <div className="space-y-7">
@@ -64,6 +73,30 @@ export function HomePage() {
         </div>
       </section>
 
+      {/* 프로필 완성 넛지 (로그인·미완성 시) */}
+      {completeness && completeness.percent < 100 && (
+        <Link to="/me" className="press block">
+          <Card className="flex items-center gap-3 p-4 hover:shadow-soft">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gold-400/20 text-gold-600">
+              <UserPlus className="size-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-navy-900">
+                프로필을 완성해 주세요 · {completeness.percent}%
+              </p>
+              <p className="truncate text-xs text-navy-500">
+                {completeness.missing
+                  .slice(0, 3)
+                  .map((f) => f.label)
+                  .join(' · ')}{' '}
+                추가하면 더 잘 연결됩니다
+              </p>
+            </div>
+            <ChevronRight className="size-4 shrink-0 text-navy-300" />
+          </Card>
+        </Link>
+      )}
+
       {/* 최근 도움요청 */}
       <section>
         <SectionHeader title="최근 도움요청" to="/requests" />
@@ -81,6 +114,18 @@ export function HomePage() {
           </div>
         )}
       </section>
+
+      {/* 추천 회원 (내 필요/업종 기반) */}
+      {recommended && recommended.length > 0 && (
+        <section>
+          <SectionHeader title="추천 회원" to="/members" />
+          <div className="space-y-2.5">
+            {recommended.map((r) => (
+              <MemberCard key={r.member._id} member={r.member} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* 기여 랭킹 */}
       <section>

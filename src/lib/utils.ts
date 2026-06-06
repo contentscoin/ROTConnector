@@ -24,3 +24,10 @@ export function splitTags(input: string): string[] {
 export function safeUrl(url: string): string | undefined {
   return /^https?:\/\//i.test(url.trim()) ? url : undefined
 }
+
+// 콤마 구분 문자열에 태그 추가(중복 시 무시). TagSuggest 칩 클릭용.
+export function addTag(current: string, tag: string): string {
+  const tags = splitTags(current)
+  if (tags.some((t) => t.toLowerCase() === tag.toLowerCase())) return current
+  return [...tags, tag].join(', ')
+}
