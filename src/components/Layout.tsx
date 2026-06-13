@@ -3,11 +3,14 @@ import {
   Home,
   Users,
   Handshake,
+  ArrowLeftRight,
   UserRound,
   ShieldCheck,
   LogIn,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useQuery } from 'convex/react'
+import { api } from '../../convex/_generated/api'
 import { useSession } from '../lib/session'
 import { cn } from '../lib/utils'
 import { Avatar } from './ui'
@@ -17,20 +20,29 @@ type Tab = {
   label: string
   icon: typeof Home
   adminOnly?: boolean
+  memberOnly?: boolean
 }
 
 const tabs: Tab[] = [
   { to: '/', label: '홈', icon: Home },
   { to: '/members', label: '회원', icon: Users },
   { to: '/requests', label: '요청', icon: Handshake },
+  { to: '/connections', label: '교류', icon: ArrowLeftRight, memberOnly: true },
   { to: '/me', label: '내 정보', icon: UserRound },
   { to: '/admin', label: '운영', icon: ShieldCheck, adminOnly: true },
 ]
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { member, isAdmin } = useSession()
+  const { token, member, isAdmin } = useSession()
   const { pathname } = useLocation()
-  const visibleTabs = tabs.filter((t) => !t.adminOnly || isAdmin)
+  const visibleTabs = tabs.filter(
+    (t) => (!t.adminOnly || isAdmin) && (!t.memberOnly || member),
+  )
+  // 받은 교류 신청 대기 수 (교류 탭 뱃지)
+  const pendingCount = useQuery(
+    api.connections.pendingReceivedCount,
+    token ? { token } : 'skip',
+  )
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-[480px] flex-col bg-navy-50">
@@ -79,7 +91,7 @@ export function Layout({ children }: { children: ReactNode }) {
             >
               <span
                 className={cn(
-                  'flex items-center justify-center rounded-full px-4 py-0.5 transition-colors',
+                  'relative flex items-center justify-center rounded-full px-4 py-0.5 transition-colors',
                   active ? 'bg-navy-100' : 'bg-transparent',
                 )}
               >
@@ -90,6 +102,11 @@ export function Layout({ children }: { children: ReactNode }) {
                   )}
                   strokeWidth={active ? 2.4 : 2}
                 />
+                {to === '/connections' && (pendingCount ?? 0) > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 rounded-full bg-red-500 text-white text-[10px] min-w-4 h-4 px-1 flex items-center justify-center font-bold">
+                    {pendingCount}
+                  </span>
+                )}
               </span>
               <span
                 className={cn(

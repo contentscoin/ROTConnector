@@ -51,7 +51,23 @@ export const list = query({
           .includes(needle),
       )
     }
-    return Promise.all(requests.map((r) => withAuthor(ctx, r)))
+    const withAuthors = await Promise.all(
+      requests.map(async (r) => ({ r, author: await ctx.db.get(r.authorId) })),
+    )
+    // 공개 피드에는 활성 회원의 요청만 노출 (정지·미승인 작성자 글은 디렉토리와 동일하게 제외)
+    return withAuthors
+      .filter(({ author }) => author?.status === 'active')
+      .map(({ r, author }) => ({
+        ...r,
+        author: author
+          ? {
+              _id: author._id,
+              name: author.name,
+              company: author.company,
+              cohort: author.cohort,
+            }
+          : null,
+      }))
   },
 })
 

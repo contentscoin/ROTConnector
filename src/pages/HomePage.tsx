@@ -8,11 +8,13 @@ import {
   Award,
   ChevronRight,
   UserPlus,
+  GraduationCap,
+  School,
 } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
-import { Card, Spinner } from '../components/ui'
+import { Badge, Card, Spinner } from '../components/ui'
 import { RequestCard, MemberCard } from '../components/cards'
-import { formatDate } from '../lib/format'
+import { formatCohort, formatDate } from '../lib/format'
 import { useSession } from '../lib/session'
 import { profileCompleteness } from '../lib/profile'
 
@@ -32,6 +34,9 @@ export function HomePage() {
     api.members.recommendForMember,
     token ? { token } : 'skip',
   )
+  const facets = useQuery(api.members.facets, {})
+  // 내 동기·동문 수 (본인 제외 active 기준)
+  const peers = useQuery(api.members.peerCounts, token ? { token } : 'skip')
 
   const recent = requests
     ?.filter((r) => r.status === 'open' || r.status === 'matching')
@@ -56,6 +61,13 @@ export function HomePage() {
           <p className="mt-2.5 text-sm leading-relaxed text-navy-100/80">
             도움요청·사업소개·행사·후원·협업 기회를 한곳에.
           </p>
+          {/* 커뮤니티 통계 한 줄 */}
+          {facets && (
+            <p className="mt-2 text-xs font-semibold text-gold-400/90">
+              회원 {facets.total}명 · {facets.cohorts.length}개 기수 ·{' '}
+              {facets.universities.length}개 학교
+            </p>
+          )}
           <div className="mt-5 grid grid-cols-2 gap-2.5">
             {actions.map(({ to, label, icon: Icon }) => (
               <Link
@@ -115,13 +127,102 @@ export function HomePage() {
         )}
       </section>
 
+      {/* 내 동기·동문 (로그인 + 기수/학교 입력 시) */}
+      {member &&
+        peers &&
+        (peers.cohortCount > 0 || peers.universityCount > 0 ? (
+          <section>
+            <SectionHeader title="내 동기·동문" />
+            <div className="grid grid-cols-2 gap-2.5">
+              {peers.cohort && peers.cohortCount > 0 && (
+                <Link
+                  to={`/members?cohort=${encodeURIComponent(peers.cohort)}`}
+                  className={`press block ${
+                    peers.university && peers.universityCount > 0
+                      ? ''
+                      : 'col-span-2'
+                  }`}
+                >
+                  <Card className="h-full p-4 hover:shadow-soft">
+                    <div className="mb-1.5 flex size-9 items-center justify-center rounded-xl bg-navy-100 text-navy-700">
+                      <GraduationCap className="size-5" />
+                    </div>
+                    <p className="text-lg font-extrabold text-navy-900">
+                      {peers.cohortCount}명
+                    </p>
+                    <p className="text-xs font-medium text-navy-400">
+                      {formatCohort(peers.cohort)} 동기
+                    </p>
+                  </Card>
+                </Link>
+              )}
+              {peers.university && peers.universityCount > 0 && (
+                <Link
+                  to={`/members?university=${encodeURIComponent(peers.university)}`}
+                  className={`press block ${
+                    peers.cohort && peers.cohortCount > 0 ? '' : 'col-span-2'
+                  }`}
+                >
+                  <Card className="h-full p-4 hover:shadow-soft">
+                    <div className="mb-1.5 flex size-9 items-center justify-center rounded-xl bg-gold-400/20 text-gold-600">
+                      <School className="size-5" />
+                    </div>
+                    <p className="text-lg font-extrabold text-navy-900">
+                      {peers.universityCount}명
+                    </p>
+                    <p className="text-xs font-medium text-navy-400">
+                      {peers.university} 동문
+                    </p>
+                  </Card>
+                </Link>
+              )}
+            </div>
+          </section>
+        ) : !peers.cohort && !peers.university ? (
+          // 기수·학교 미입력 넛지 (입력했는데 동기 0명이면 미표시)
+          <section>
+            <SectionHeader title="내 동기·동문" />
+            <Link to="/me" className="press block">
+              <Card className="flex items-center gap-3 p-4 hover:shadow-soft">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-navy-100 text-navy-700">
+                  <GraduationCap className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-navy-900">동기·동문 찾기</p>
+                  <p className="text-xs text-navy-500">
+                    프로필에 기수·학교를 입력하면 동기·동문을 찾아드립니다
+                  </p>
+                </div>
+                <ChevronRight className="size-4 shrink-0 text-navy-300" />
+              </Card>
+            </Link>
+          </section>
+        ) : null)}
+
       {/* 추천 회원 (내 필요/업종 기반) */}
       {recommended && recommended.length > 0 && (
         <section>
           <SectionHeader title="추천 회원" to="/members" />
           <div className="space-y-2.5">
             {recommended.map((r) => (
-              <MemberCard key={r.member._id} member={r.member} />
+              <div key={r.member._id} className="relative">
+                {/* 동기/동문 매칭 뱃지 (recommendForMember 가중치 반영) */}
+                {(r.cohortMatch || r.universityMatch) && (
+                  <div className="absolute -top-2 right-3 z-10 flex gap-1">
+                    {r.cohortMatch && (
+                      <Badge className="bg-navy-800 text-white shadow-sm">
+                        동기
+                      </Badge>
+                    )}
+                    {r.universityMatch && (
+                      <Badge className="bg-gold-400/90 text-navy-900 shadow-sm">
+                        동문
+                      </Badge>
+                    )}
+                  </div>
+                )}
+                <MemberCard member={r.member} />
+              </div>
             ))}
           </div>
         </section>

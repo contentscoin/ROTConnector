@@ -33,6 +33,18 @@ export const urgencyTone: Record<string, string> = {
   high: 'text-red-600',
 }
 
+export const connectionStatusLabel: Record<string, string> = {
+  pending: '대기중',
+  accepted: '연결됨',
+  declined: '거절됨',
+}
+
+export const connectionStatusTone: Record<string, string> = {
+  pending: 'bg-gold-400/30 text-gold-600',
+  accepted: 'bg-emerald-100 text-emerald-700',
+  declined: 'bg-navy-100 text-navy-400',
+}
+
 export const contributionLabel: Record<string, string> = {
   intro: '소개',
   consult: '상담',
@@ -67,6 +79,12 @@ export function formatDate(dateStr?: string): string {
     month: 'long',
     day: 'numeric',
   })
+}
+
+// 기수 표시 포맷 ("37" → "37기", 숫자가 아니면 원본 유지)
+export function formatCohort(cohort?: string): string {
+  if (!cohort) return ''
+  return /^\d+$/.test(cohort) ? `${cohort}기` : cohort
 }
 
 // 이름 이니셜 (아바타용)

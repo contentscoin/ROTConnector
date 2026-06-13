@@ -10,6 +10,7 @@ import {
   urgencyLabel,
   urgencyTone,
   timeAgo,
+  formatCohort,
 } from '../lib/format'
 import { cn } from '../lib/utils'
 
@@ -79,6 +80,10 @@ export function RequestCard({ req }: { req: RequestItem }) {
 }
 
 export function MemberCard({ member }: { member: PublicMember }) {
+  // 기수·출신 학교 뱃지 (예: "37기 · 한양대", 둘 다 없으면 미표시)
+  const cohortLine = [formatCohort(member.cohort), member.university]
+    .filter(Boolean)
+    .join(' · ')
   return (
     <Link to={`/members/${member._id}`} className="press block">
       <Card className="flex items-center gap-3.5 p-3.5 hover:shadow-soft">
@@ -88,9 +93,9 @@ export function MemberCard({ member }: { member: PublicMember }) {
             <span className="truncate font-bold text-navy-900">
               {member.name}
             </span>
-            {member.cohort && (
+            {cohortLine && (
               <span className="shrink-0 text-xs text-navy-400">
-                {member.cohort}
+                {cohortLine}
               </span>
             )}
             {member.contributionScore > 0 && (

@@ -32,8 +32,11 @@ export function MyProfilePage() {
     title: member?.title ?? '',
     company: member?.company ?? '',
     cohort: member?.cohort ?? '',
+    university: member?.university ?? '',
     region: member?.region ?? '',
     intro: member?.intro ?? '',
+    products: member?.products ?? '',
+    customers: member?.customers ?? '',
     industry: (member?.industry ?? []).join(', '),
     helpOffer: (member?.helpOffer ?? []).join(', '),
     helpNeed: (member?.helpNeed ?? []).join(', '),
@@ -49,6 +52,8 @@ export function MyProfilePage() {
     intro: form.intro,
     company: form.company,
     title: form.title,
+    cohort: form.cohort,
+    university: form.university,
     region: form.region,
     industry: splitTags(form.industry),
     helpOffer: splitTags(form.helpOffer),
@@ -71,9 +76,12 @@ export function MyProfilePage() {
           name: form.name.trim(),
           title: form.title.trim(),
           company: form.company.trim(),
-          cohort: form.cohort.trim(),
+          cohort: form.cohort.trim() || undefined,
+          university: form.university.trim() || undefined,
           region: form.region,
           intro: form.intro.trim(),
+          products: form.products.trim() || undefined,
+          customers: form.customers.trim() || undefined,
           industry: splitTags(form.industry),
           helpOffer: splitTags(form.helpOffer),
           helpNeed: splitTags(form.helpNeed),
@@ -159,9 +167,16 @@ export function MyProfilePage() {
           </Field>
           <Field label="기수">
             <Input
-              placeholder="학군 38기"
+              placeholder="예: 37 (기수 숫자)"
               value={form.cohort}
               onChange={(e) => set('cohort', e.target.value)}
+            />
+          </Field>
+          <Field label="출신 학교">
+            <Input
+              placeholder="예: 한양대"
+              value={form.university}
+              onChange={(e) => set('university', e.target.value)}
             />
           </Field>
           <Field label="직함">
@@ -171,12 +186,14 @@ export function MyProfilePage() {
               onChange={(e) => set('title', e.target.value)}
             />
           </Field>
-          <Field label="회사">
-            <Input
-              value={form.company}
-              onChange={(e) => set('company', e.target.value)}
-            />
-          </Field>
+          <div className="col-span-2">
+            <Field label="회사">
+              <Input
+                value={form.company}
+                onChange={(e) => set('company', e.target.value)}
+              />
+            </Field>
+          </div>
         </div>
 
         <Field label="지역">
@@ -194,6 +211,21 @@ export function MyProfilePage() {
             placeholder="어떤 사업을 하고 계신가요?"
             value={form.intro}
             onChange={(e) => set('intro', e.target.value)}
+          />
+        </Field>
+
+        <Field label="주요 제품/서비스" hint="한 줄로 간단히 (최대 200자)">
+          <Input
+            placeholder="예: B2B 인사관리 SaaS"
+            value={form.products}
+            onChange={(e) => set('products', e.target.value)}
+          />
+        </Field>
+        <Field label="주요 고객" hint="한 줄로 간단히 (최대 200자)">
+          <Input
+            placeholder="예: 50인 이하 스타트업"
+            value={form.customers}
+            onChange={(e) => set('customers', e.target.value)}
           />
         </Field>
 

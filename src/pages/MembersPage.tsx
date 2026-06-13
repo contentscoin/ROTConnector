@@ -1,15 +1,30 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import { Search, X, Users, UserRoundPen, ChevronRight } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { Chip, EmptyState, Input, SkeletonList } from '../components/ui'
 import { MemberCard } from '../components/cards'
+import { formatCohort } from '../lib/format'
 import { useSession } from '../lib/session'
 
 export function MembersPage() {
   const { member } = useSession()
-  const [q, setQ] = useState('')
+  // 기수·학교 필터는 URL 쿼리(?cohort=&university=)와 양방향 동기화 —
+  // 홈 동기·동문 카드 딥링크 진입, 해제·새로고침·공유 모두 일관되게 동작
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [q, setQ] = useState(() => searchParams.get('q') ?? '')
+  const cohort = searchParams.get('cohort')
+  const university = searchParams.get('university')
+  const setUrlFilter = (key: 'cohort' | 'university', value: string | null) => {
+    const next = new URLSearchParams(searchParams)
+    if (value) next.set(key, value)
+    else next.delete(key)
+    setSearchParams(next, { replace: true })
+  }
+  const setCohort = (value: string | null) => setUrlFilter('cohort', value)
+  const setUniversity = (value: string | null) =>
+    setUrlFilter('university', value)
   const [industry, setIndustry] = useState<string | null>(null)
   const [region, setRegion] = useState<string | null>(null)
   const [helpOffer, setHelpOffer] = useState<string | null>(null)
@@ -17,6 +32,8 @@ export function MembersPage() {
   const facets = useQuery(api.members.facets, {})
   const members = useQuery(api.members.list, {
     q: q || undefined,
+    cohort: cohort || undefined,
+    university: university || undefined,
     industry: industry || undefined,
     region: region || undefined,
     helpOffer: helpOffer || undefined,
@@ -67,6 +84,74 @@ export function MembersPage() {
           </button>
         )}
       </div>
+
+      {/* 로그인 회원 퀵 칩 — 내 동기·동문 바로 찾기 */}
+      {member && (member.cohort || member.university) && (
+        <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+          {member.cohort && (
+            <Chip
+              active={cohort === member.cohort}
+              onClick={() =>
+                setCohort(
+                  cohort === member.cohort ? null : (member.cohort ?? null),
+                )
+              }
+            >
+              내 동기 ({formatCohort(member.cohort)})
+            </Chip>
+          )}
+          {member.university && (
+            <Chip
+              active={university === member.university}
+              onClick={() =>
+                setUniversity(
+                  university === member.university
+                    ? null
+                    : (member.university ?? null),
+                )
+              }
+            >
+              {member.university} 동문
+            </Chip>
+          )}
+        </div>
+      )}
+
+      {/* 기수 필터 */}
+      {facets && facets.cohorts.length > 0 && (
+        <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+          <Chip active={!cohort} onClick={() => setCohort(null)}>
+            전체 기수
+          </Chip>
+          {facets.cohorts.map((c) => (
+            <Chip
+              key={c}
+              active={cohort === c}
+              onClick={() => setCohort(cohort === c ? null : c)}
+            >
+              {formatCohort(c)}
+            </Chip>
+          ))}
+        </div>
+      )}
+
+      {/* 학교 필터 */}
+      {facets && facets.universities.length > 0 && (
+        <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+          <Chip active={!university} onClick={() => setUniversity(null)}>
+            전체 학교
+          </Chip>
+          {facets.universities.map((u) => (
+            <Chip
+              key={u}
+              active={university === u}
+              onClick={() => setUniversity(university === u ? null : u)}
+            >
+              {u}
+            </Chip>
+          ))}
+        </div>
+      )}
 
       {/* 업종 필터 */}
       {facets && facets.industries.length > 0 && (

@@ -32,7 +32,11 @@ export async function memberFromToken(
   if (!session) return null
   // 만료 검사 (QueryCtx라 삭제는 불가 — null 반환으로 무효화)
   if (Date.now() - session.createdAt > SESSION_TTL_MS) return null
-  return await ctx.db.get(session.memberId)
+  const member = await ctx.db.get(session.memberId)
+  // 정지(suspended) 계정은 인증 자체를 무효화 — 모든 보호 경로(requireMember/
+  // requireAdmin/me)에서 로그아웃 상태로 취급되어 쓰기·교류·조회가 차단된다.
+  if (member?.status === 'suspended') return null
+  return member
 }
 
 // 로그인 필수 (mutation/query 공용). 실패 시 throw.
@@ -69,7 +73,12 @@ async function createSession(
 }
 
 // 슬라이딩 윈도우 레이트리밋. 한도 초과 시 throw.
-async function enforceRateLimit(ctx: MutationCtx, key: string): Promise<void> {
+// 키별 공용 헬퍼 — login:<phone> 외에 connect:<memberId>(교류 신청 스팸 방지)에서도 재사용.
+export async function enforceRateLimit(
+  ctx: MutationCtx,
+  key: string,
+  message = '시도가 너무 많습니다. 잠시 후 다시 시도해주세요.',
+): Promise<void> {
   const now = Date.now()
   const existing = await ctx.db
     .query('rateLimits')
@@ -84,7 +93,7 @@ async function enforceRateLimit(ctx: MutationCtx, key: string): Promise<void> {
     return
   }
   if (existing.count >= LOGIN_MAX_ATTEMPTS) {
-    throw new Error('로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.')
+    throw new Error(message)
   }
   await ctx.db.patch(existing._id, { count: existing.count + 1 })
 }
@@ -98,7 +107,11 @@ export const login = mutation({
       throw new Error('올바른 휴대폰 번호를 입력해주세요.')
     }
     // phone당 브루트포스 완화 (공개 디렉토리에서 phone projection이 제거됐어도 방어심층)
-    await enforceRateLimit(ctx, `login:${normalized}`)
+    await enforceRateLimit(
+      ctx,
+      `login:${normalized}`,
+      '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.',
+    )
     const member = await ctx.db
       .query('members')
       .withIndex('by_phone', (q) => q.eq('phone', normalized))
@@ -107,6 +120,10 @@ export const login = mutation({
       throw new Error(
         '등록된 회원이 아닙니다. 알비연 운영진에게 가입을 요청해주세요.',
       )
+    }
+    // 정지된 계정은 토큰 재발급 차단
+    if (member.status === 'suspended') {
+      throw new Error('정지된 계정입니다. 운영진에게 문의해주세요.')
     }
     const token = await createSession(ctx, member._id)
     // isAdmin은 응답에 싣지 않는다(열거 시 관리자 여부 노출 방지). 클라이언트는 auth.me로 조회.

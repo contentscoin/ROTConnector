@@ -16,6 +16,13 @@ export const matchStatus = v.union(
   v.literal('done'), // 완료
 )
 
+// 회원 간 1:1 교류 신청 상태
+export const connectionStatus = v.union(
+  v.literal('pending'), // 대기
+  v.literal('accepted'), // 수락
+  v.literal('declined'), // 거절
+)
+
 export const contributionType = v.union(
   v.literal('intro'), // 소개 기여
   v.literal('consult'), // 상담 기여
@@ -27,18 +34,25 @@ export const contributionType = v.union(
 export default defineSchema({
   members: defineTable({
     name: v.string(),
-    cohort: v.optional(v.string()), // 기수
+    cohort: v.optional(v.string()), // 기수 (normalizeCohort로 숫자만 저장: "37기"→"37")
+    university: v.optional(v.string()), // 출신 학교(학군단)
     phone: v.string(), // 클레임/연락 식별자
     company: v.optional(v.string()),
     title: v.optional(v.string()), // 직함
     industry: v.array(v.string()), // 업종 태그
     region: v.optional(v.string()),
     intro: v.optional(v.string()), // 사업 소개
+    products: v.optional(v.string()), // 주요 제품/서비스 한 줄
+    customers: v.optional(v.string()), // 주요 고객/거래 대상 한 줄
     helpOffer: v.array(v.string()), // 줄 수 있는 도움
     helpNeed: v.array(v.string()), // 필요한 도움
     links: v.array(v.object({ label: v.string(), url: v.string() })),
     isAdmin: v.boolean(),
-    status: v.union(v.literal('active'), v.literal('pending')),
+    status: v.union(
+      v.literal('active'),
+      v.literal('pending'),
+      v.literal('suspended'),
+    ),
     contributionScore: v.number(),
     createdAt: v.number(),
   })
@@ -69,6 +83,19 @@ export default defineSchema({
   })
     .index('by_request', ['requestId'])
     .index('by_helper', ['helperId']),
+
+  // 회원 간 1:1 교류 신청. phone은 accepted 상태의 상대방에게만 공개.
+  connections: defineTable({
+    fromId: v.id('members'),
+    toId: v.id('members'),
+    message: v.string(),
+    topic: v.optional(v.string()), // 교류 주제 (커피챗/협업 제안 등)
+    status: connectionStatus,
+    respondedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index('by_from', ['fromId'])
+    .index('by_to', ['toId']),
 
   contributions: defineTable({
     memberId: v.id('members'),

@@ -10,6 +10,7 @@ import { MemberDetailPage } from './pages/MemberDetailPage'
 import { RequestsPage } from './pages/RequestsPage'
 import { NewRequestPage } from './pages/NewRequestPage'
 import { RequestDetailPage } from './pages/RequestDetailPage'
+import { ConnectionsPage } from './pages/ConnectionsPage'
 import { MyProfilePage } from './pages/MyProfilePage'
 import { AdminDashboardPage } from './pages/AdminDashboardPage'
 import { EventsPage } from './pages/EventsPage'
@@ -48,6 +49,14 @@ export default function App() {
           }
         />
         <Route path="/requests/:id" element={<RequestDetailPage />} />
+        <Route
+          path="/connections"
+          element={
+            <Protected>
+              <ConnectionsPage />
+            </Protected>
+          }
+        />
         <Route
           path="/me"
           element={

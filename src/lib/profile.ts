@@ -5,6 +5,8 @@ type ProfileLike = {
   company?: string
   title?: string
   region?: string
+  cohort?: string
+  university?: string
   industry: string[]
   helpOffer: string[]
   helpNeed: string[]
@@ -18,6 +20,12 @@ const FIELDS: { key: string; label: string; check: (m: ProfileLike) => boolean }
     { key: 'company', label: '회사', check: (m) => !!m.company?.trim() },
     { key: 'title', label: '직함', check: (m) => !!m.title?.trim() },
     { key: 'region', label: '지역', check: (m) => !!m.region?.trim() },
+    { key: 'cohort', label: '기수', check: (m) => !!m.cohort?.trim() },
+    {
+      key: 'university',
+      label: '출신 학교',
+      check: (m) => !!m.university?.trim(),
+    },
     { key: 'industry', label: '업종', check: (m) => m.industry.length > 0 },
     {
       key: 'helpOffer',
