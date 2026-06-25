@@ -8,6 +8,7 @@ import {
   Handshake,
   Sparkles,
   Award,
+  CalendarDays,
   type LucideIcon,
 } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
@@ -45,6 +46,10 @@ const ICONS: Record<string, { icon: LucideIcon; tone: string }> = {
   'match.completed': {
     icon: Award,
     tone: 'bg-gold-400/30 text-gold-600',
+  },
+  'event.created': {
+    icon: CalendarDays,
+    tone: 'bg-navy-100 text-navy-700',
   },
 }
 

@@ -117,6 +117,16 @@ export default defineSchema({
     createdAt: v.number(),
   }),
 
+  // 행사/후원 참석 의사 (RSVP). 회원당 행사별 1건.
+  eventRsvps: defineTable({
+    eventId: v.id('events'),
+    memberId: v.id('members'),
+    status: v.union(v.literal('going'), v.literal('interested')), // 참석 / 관심
+    createdAt: v.number(),
+  })
+    .index('by_event', ['eventId'])
+    .index('by_member', ['memberId']),
+
   // 인앱 알림센터. 회원에게 도달하는 이벤트(교류 신청/수락, 가입 승인 등)를 영속.
   notifications: defineTable({
     userId: v.id('members'), // 수신자

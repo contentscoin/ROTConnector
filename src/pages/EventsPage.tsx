@@ -8,6 +8,8 @@ import {
   Plus,
   Check,
   Undo2,
+  Star,
+  Users,
 } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -44,14 +46,16 @@ const emptyForm = {
 }
 
 export function EventsPage() {
-  const { token, isAdmin } = useSession()
+  const { token, member, isAdmin } = useSession()
   const [filter, setFilter] = useState<Filter>('all')
-  const events = useQuery(
-    api.events.list,
-    filter === 'all' ? {} : { kind: filter },
-  )
+  const events = useQuery(api.events.list, {
+    ...(filter === 'all' ? {} : { kind: filter }),
+    ...(token ? { token } : {}),
+  })
   const createEvent = useMutation(api.events.create)
   const setEventStatus = useMutation(api.events.setStatus)
+  const rsvpEvent = useMutation(api.events.rsvp)
+  const [rsvpBusy, setRsvpBusy] = useState<string | null>(null)
 
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
@@ -94,6 +98,28 @@ export function EventsPage() {
       setError(errorMessage(err))
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function onRsvp(
+    id: Id<'events'>,
+    current: 'going' | 'interested' | null,
+    next: 'going' | 'interested',
+  ) {
+    if (!token) return
+    setActionError(null)
+    setRsvpBusy(id)
+    try {
+      // 같은 항목 재클릭 시 해제(none)
+      await rsvpEvent({
+        token,
+        eventId: id,
+        status: current === next ? 'none' : next,
+      })
+    } catch (err) {
+      setActionError(errorMessage(err))
+    } finally {
+      setRsvpBusy(null)
     }
   }
 
@@ -267,6 +293,42 @@ export function EventsPage() {
                   </span>
                 )}
               </div>
+
+              {/* 참석/관심 RSVP */}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {e.status === 'upcoming' && member?.status === 'active' ? (
+                  <>
+                    <button
+                      onClick={() => onRsvp(e._id, e.myRsvp, 'going')}
+                      disabled={rsvpBusy === e._id}
+                      className={`press inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50 ${
+                        e.myRsvp === 'going'
+                          ? 'bg-navy-800 text-white'
+                          : 'border border-navy-200 bg-white text-navy-600'
+                      }`}
+                    >
+                      <Check className="size-4" /> 참석 {e.goingCount}
+                    </button>
+                    <button
+                      onClick={() => onRsvp(e._id, e.myRsvp, 'interested')}
+                      disabled={rsvpBusy === e._id}
+                      className={`press inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50 ${
+                        e.myRsvp === 'interested'
+                          ? 'bg-gold-500 text-white'
+                          : 'border border-navy-200 bg-white text-navy-600'
+                      }`}
+                    >
+                      <Star className="size-4" /> 관심 {e.interestedCount}
+                    </button>
+                  </>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-navy-400">
+                    <Users className="size-3.5" />
+                    참석 {e.goingCount} · 관심 {e.interestedCount}
+                  </span>
+                )}
+              </div>
+
               {isAdmin && token && (
                 <div className="mt-3 flex justify-end">
                   <Button
