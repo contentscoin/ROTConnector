@@ -43,7 +43,13 @@ npx convex deploy            # 함수 + 스키마를 prod에 배포
 
 ## 4. 프론트엔드 배포 (Vercel)
 
-- Git 푸시 → Vercel 자동 빌드, 또는 `vercel --prod`.
+- 배포는 **`vercel --prod` CLI**로 한다. 이 프로젝트는 git push 자동 빌드가 아니다
+  (main 푸시만으로는 Vercel 빌드가 트리거되지 않음 — `vercel ls`로 확인됨).
+  ```
+  vercel --prod --yes
+  ```
+  → 프로덕션 별칭 `https://rotconnector.vercel.app` 로 alias.
+- Vercel 인증/링크는 이미 돼 있음(team jakes-projects, project rotconnector).
 - SPA rewrite는 `vercel.json`에서 **확장자 없는 경로만** index.html로 보냄
   (`/((?!.*\.).*)`) — manifest/아이콘/정적 자산은 그대로 제공.
 
