@@ -15,19 +15,24 @@ export const list = query({
     let events = await ctx.db.query('events').order('desc').collect()
     if (kind) events = events.filter((e) => e.kind === kind)
     const me = await memberFromToken(ctx, token)
-    const rsvps = await ctx.db.query('eventRsvps').collect()
-    return events.map((e) => {
-      const forEvent = rsvps.filter((r) => r.eventId === e._id)
-      return {
-        ...e,
-        goingCount: forEvent.filter((r) => r.status === 'going').length,
-        interestedCount: forEvent.filter((r) => r.status === 'interested')
-          .length,
-        myRsvp: me
-          ? (forEvent.find((r) => r.memberId === me._id)?.status ?? null)
-          : null,
-      }
-    })
+    // 행사별 by_event 인덱스 조회 — 전체 eventRsvps 풀스캔을 피해 RSVP 누적에도 확장.
+    return await Promise.all(
+      events.map(async (e) => {
+        const forEvent = await ctx.db
+          .query('eventRsvps')
+          .withIndex('by_event', (q) => q.eq('eventId', e._id))
+          .collect()
+        return {
+          ...e,
+          goingCount: forEvent.filter((r) => r.status === 'going').length,
+          interestedCount: forEvent.filter((r) => r.status === 'interested')
+            .length,
+          myRsvp: me
+            ? (forEvent.find((r) => r.memberId === me._id)?.status ?? null)
+            : null,
+        }
+      }),
+    )
   },
 })
 
