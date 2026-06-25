@@ -69,10 +69,52 @@ export const rsvp = mutation({
   },
 })
 
+// 행사 상세 — 참석/관심 명단(연락처 미포함) + (로그인 시) 내 RSVP.
 export const get = query({
-  args: { id: v.id('events') },
-  handler: async (ctx, { id }) => {
-    return await ctx.db.get(id)
+  args: { id: v.id('events'), token: v.optional(v.string()) },
+  handler: async (ctx, { id, token }) => {
+    const event = await ctx.db.get(id)
+    if (!event) return null
+    const me = await memberFromToken(ctx, token)
+    const rsvps = await ctx.db
+      .query('eventRsvps')
+      .withIndex('by_event', (q) => q.eq('eventId', id))
+      .collect()
+    const going: Array<{
+      _id: string
+      name: string
+      company?: string
+      cohort?: string
+      university?: string
+    }> = []
+    const interested: typeof going = []
+    for (const r of rsvps) {
+      const m = await ctx.db.get(r.memberId)
+      if (!m) continue // 탈퇴/삭제된 회원은 명단에서 제외
+      const summary = {
+        _id: m._id as string,
+        name: m.name,
+        company: m.company,
+        cohort: m.cohort,
+        university: m.university,
+      }
+      if (r.status === 'going') going.push(summary)
+      else interested.push(summary)
+    }
+    const byName = (a: { name: string }, b: { name: string }) =>
+      a.name.localeCompare(b.name, 'ko')
+    going.sort(byName)
+    interested.sort(byName)
+    return {
+      ...event,
+      going,
+      interested,
+      goingCount: going.length,
+      interestedCount: interested.length,
+      myRsvp: me
+        ? (rsvps.find((r) => r.memberId === me._id)?.status ?? null)
+        : null,
+    }
   },
 })
 

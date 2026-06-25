@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from 'convex/react'
 import {
   CalendarDays,
@@ -269,7 +270,11 @@ export function EventsPage() {
                   className="ml-auto h-8 px-2"
                 />
               </div>
-              <h2 className="text-lg font-extrabold text-navy-900">{e.title}</h2>
+              <Link to={`/events/${e._id}`} className="press block">
+                <h2 className="text-lg font-extrabold text-navy-900 hover:underline">
+                  {e.title}
+                </h2>
+              </Link>
               <p className="mt-1.5 leading-relaxed whitespace-pre-wrap text-sm text-navy-600">
                 {e.body}
               </p>
