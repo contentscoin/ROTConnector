@@ -127,6 +127,20 @@ export default defineSchema({
     .index('by_event', ['eventId'])
     .index('by_member', ['memberId']),
 
+  // FCM 디바이스 토큰 (푸시 알림). 회원당 여러 기기 가능. 토큰은 기기별 고유.
+  pushTokens: defineTable({
+    memberId: v.id('members'),
+    token: v.string(),
+    platform: v.union(
+      v.literal('web'),
+      v.literal('ios'),
+      v.literal('android'),
+    ),
+    createdAt: v.number(),
+  })
+    .index('by_member', ['memberId'])
+    .index('by_token', ['token']),
+
   // 인앱 알림센터. 회원에게 도달하는 이벤트(교류 신청/수락, 가입 승인 등)를 영속.
   notifications: defineTable({
     userId: v.id('members'), // 수신자

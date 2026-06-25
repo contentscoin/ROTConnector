@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from 'convex/react'
 import {
@@ -16,6 +17,12 @@ import type { Id } from '../../convex/_generated/dataModel'
 import { useSession } from '../lib/session'
 import { Button, Card, EmptyState, SkeletonList } from '../components/ui'
 import { timeAgo } from '../lib/format'
+import {
+  enableWebPush,
+  pushConfigured,
+  pushPermissionGranted,
+  pushSupported,
+} from '../lib/push'
 
 // 알림 타입별 아이콘/색 (convex/notify.ts NotificationType과 1:1)
 const ICONS: Record<string, { icon: LucideIcon; tone: string }> = {
@@ -72,8 +79,35 @@ export function NotificationsPage() {
   ) as NotificationRow[] | undefined
   const markRead = useMutation(api.notifications.markRead)
   const markAllRead = useMutation(api.notifications.markAllRead)
+  const registerPush = useMutation(api.push.register)
 
   const hasUnread = (rows ?? []).some((n) => !n.read)
+
+  // 웹 푸시: 설정·지원되고 아직 권한 허용 전일 때만 진입점 노출
+  const [pushOn, setPushOn] = useState(() => pushPermissionGranted())
+  const [pushBusy, setPushBusy] = useState(false)
+  const [pushError, setPushError] = useState<string | null>(null)
+  const showPushBanner =
+    pushConfigured && pushSupported() && !pushOn && !!token
+
+  async function onEnablePush() {
+    if (!token) return
+    setPushBusy(true)
+    setPushError(null)
+    try {
+      const fcmToken = await enableWebPush()
+      if (!fcmToken) {
+        setPushError('알림 권한이 거부되었거나 지원하지 않는 브라우저예요.')
+        return
+      }
+      await registerPush({ token, fcmToken, platform: 'web' })
+      setPushOn(true)
+    } catch {
+      setPushError('알림 설정 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   const open = (n: NotificationRow) => {
     if (!n.read && token) {
@@ -99,6 +133,29 @@ export function NotificationsPage() {
           </Button>
         )}
       </div>
+
+      {/* 웹 푸시 켜기 (Firebase 설정·브라우저 지원·권한 미허용 시) */}
+      {showPushBanner && (
+        <Card className="flex items-center gap-3 p-4">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-navy-100 text-navy-700">
+            <Bell className="size-[18px]" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-navy-900">
+              브라우저 푸시 알림 켜기
+            </p>
+            <p className="text-xs text-navy-500">
+              앱을 닫아도 교류·매칭·행사 소식을 받아보세요.
+            </p>
+            {pushError && (
+              <p className="mt-1 text-xs text-red-600">{pushError}</p>
+            )}
+          </div>
+          <Button size="sm" loading={pushBusy} onClick={onEnablePush}>
+            켜기
+          </Button>
+        </Card>
+      )}
 
       {rows === undefined ? (
         <SkeletonList count={5} />

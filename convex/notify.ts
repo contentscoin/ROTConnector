@@ -1,5 +1,9 @@
 import type { MutationCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
+import { internal } from './_generated/api'
+
+// Convex 런타임이 노출하는 환경변수 접근 (@types/node 미설치라 모듈 스코프로 선언).
+declare const process: { env: Record<string, string | undefined> }
 
 // 인앱 알림 타입 — 화이트리스트. 새 알림 종류는 여기에 추가.
 export type NotificationType =
@@ -35,4 +39,13 @@ export async function createNotification(
     read: false,
     createdAt: Date.now(),
   })
+  // FCM이 설정된 경우에만 푸시 발송을 스케줄 (미설정 시 no-op 액션 호출 낭비 방지).
+  if (process.env.FCM_SERVICE_ACCOUNT) {
+    await ctx.scheduler.runAfter(0, internal.push.sendToUser, {
+      userId,
+      title: n.title,
+      body: n.body,
+      link: n.link,
+    })
+  }
 }

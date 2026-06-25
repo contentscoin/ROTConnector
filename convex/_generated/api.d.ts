@@ -19,6 +19,7 @@ import type * as members from "../members.js";
 import type * as migrations from "../migrations.js";
 import type * as notifications from "../notifications.js";
 import type * as notify from "../notify.js";
+import type * as push from "../push.js";
 import type * as requests from "../requests.js";
 import type * as seed from "../seed.js";
 import type * as util from "../util.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   migrations: typeof migrations;
   notifications: typeof notifications;
   notify: typeof notify;
+  push: typeof push;
   requests: typeof requests;
   seed: typeof seed;
   util: typeof util;

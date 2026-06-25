@@ -64,7 +64,34 @@ pnpm build && npx cap sync
 npx cap open ios     # / android
 ```
 
+## 7. 푸시 알림 (FCM) 설정
+
+코드 연동은 완료돼 있고(인앱 알림 생성 시 자동 푸시 스케줄), **자격증명만 채우면 작동**한다.
+미설정 시 푸시는 no-op이라 앱은 정상 동작한다.
+
+1. **Firebase 프로젝트 생성** → 웹 앱 추가 → Cloud Messaging 활성화.
+2. **클라이언트 공개 설정**을 `.env.production`에 채우기(모두 공개값, 커밋 가능):
+   `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_PROJECT_ID`,
+   `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`,
+   `VITE_FIREBASE_VAPID_KEY`(클라우드 메시징 → 웹 푸시 인증서).
+3. **서버 비밀(서비스 계정)** 을 Convex 환경변수로(파일/깃 금지):
+   - Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → 새 비공개 키 생성(JSON).
+   - `npx convex env set FCM_SERVICE_ACCOUNT "$(cat service-account.json)"`
+4. 재배포(`npx convex deploy` + Vercel). 회원이 `/notifications`의 **"브라우저 푸시 알림 켜기"** 로 권한 허용 → 디바이스 토큰이 `pushTokens`에 등록됨.
+
+- 인앱 알림 8종 전부 푸시로도 전달된다(교류·매칭·도움요청·행사·가입승인).
+- 무효/만료 토큰은 발송 시 자동 정리(404/400).
+- 규모 주의: 행사 등록 팬아웃은 회원 수만큼 푸시 액션을 만들고 각 액션이 OAuth 토큰을
+  발급한다 — 회원 수백+ 환경에선 단일 액션 다중 토큰 발송으로 배치 권장.
+
+### 네이티브(iOS/Android) 푸시 — 후속
+
+백엔드(`pushTokens`/`push.register`/발송)는 플랫폼 무관(FCM 토큰만 있으면 됨)이라 그대로 재사용.
+네이티브는 `@capacitor/push-notifications` 설치 + APNs(iOS)/`google-services.json`(Android)
+설정 후, 플러그인의 registration 토큰을 `api.push.register({ token, fcmToken, platform: 'ios'|'android' })`
+로 보내면 된다. (Apple Developer/네이티브 빌드 환경 필요 — 별도 작업)
+
 ## 미구현 (외부 자격증명 필요)
 
-- 푸시(FCM)·카카오 알림톡 — 인앱 알림센터까지만 구현됨. 자격증명 확보 후 연동.
+- 카카오 알림톡 — 자격증명 확보 후 연동.
 - OTP 로그인 — 현재 phone 클레임 파일럿 인증. (의도적 보류)
