@@ -7,20 +7,22 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react'
-import { Loader2, Share2, Check } from 'lucide-react'
+import { Loader2, Share2, Check, ChevronDown } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 /* ---------- Button ---------- */
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'gold'
 type ButtonSize = 'sm' | 'md' | 'lg'
 
 const buttonVariants: Record<ButtonVariant, string> = {
   primary:
-    'bg-navy-800 text-white hover:bg-navy-900 active:bg-navy-950 shadow-sm shadow-navy-900/15',
+    'bg-navy-800 text-white hover:bg-navy-900 active:bg-navy-950 shadow-sm shadow-navy-900/20',
   secondary:
-    'bg-white text-navy-800 border border-navy-200 hover:bg-navy-50 active:bg-navy-100',
+    'bg-white text-navy-800 border border-navy-200 hover:bg-navy-50 hover:border-navy-300 active:bg-navy-100',
   ghost: 'bg-transparent text-navy-700 hover:bg-navy-100',
-  danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-sm shadow-red-900/15',
+  danger:
+    'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-sm shadow-red-900/15',
+  gold: 'bg-gold-500 text-navy-950 hover:bg-gold-400 active:bg-gold-600 shadow-sm shadow-gold-500/30',
 }
 
 const buttonSizes: Record<ButtonSize, string> = {
@@ -62,13 +64,19 @@ export function Button({
 /* ---------- Card ---------- */
 export function Card({
   className,
+  interactive,
   children,
   ...props
-}: { className?: string; children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
+}: {
+  className?: string
+  interactive?: boolean
+  children: ReactNode
+} & HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
         'rounded-2xl bg-white border border-navy-100/80 shadow-card',
+        interactive && 'lift cursor-pointer hover:border-navy-200 hover:shadow-soft',
         className,
       )}
       {...props}
@@ -113,10 +121,10 @@ export function Chip({
       type="button"
       onClick={onClick}
       className={cn(
-        'whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors',
+        'press whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors',
         active
-          ? 'bg-navy-800 text-white'
-          : 'bg-white text-navy-600 border border-navy-200 hover:bg-navy-50',
+          ? 'bg-navy-800 text-white shadow-sm shadow-navy-900/20'
+          : 'border border-navy-200 bg-white text-navy-600 hover:border-navy-300 hover:bg-navy-50',
       )}
     >
       {children}
@@ -337,9 +345,13 @@ export function EmptyState({
   action?: ReactNode
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-navy-200 bg-white/50 px-6 py-12 text-center">
-      {icon && <div className="mb-3 text-navy-400">{icon}</div>}
-      <p className="font-semibold text-navy-700">{title}</p>
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-navy-200 bg-white/60 px-6 py-12 text-center">
+      {icon && (
+        <div className="mb-3 flex size-14 items-center justify-center rounded-2xl bg-navy-50 text-navy-300 ring-1 ring-navy-100">
+          {icon}
+        </div>
+      )}
+      <p className="font-bold text-navy-700">{title}</p>
       {description && (
         <p className="mt-1 max-w-xs text-sm text-navy-500">{description}</p>
       )}
@@ -371,6 +383,194 @@ export function SkeletonList({ count = 5 }: { count?: number }) {
     <div className="space-y-2.5" aria-busy>
       {Array.from({ length: count }).map((_, i) => (
         <SkeletonRow key={i} />
+      ))}
+    </div>
+  )
+}
+
+/* ---------- PageHeader ---------- */
+// 페이지 상단 제목 블록 (선택: eyebrow 라벨 · 아이콘 칩 · 우측 액션 · 부제)
+export function PageHeader({
+  title,
+  subtitle,
+  eyebrow,
+  icon,
+  action,
+  className,
+}: {
+  title: string
+  subtitle?: string
+  eyebrow?: string
+  icon?: ReactNode
+  action?: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn('flex items-start gap-3', className)}>
+      {icon && (
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-navy-800 text-gold-400 shadow-card">
+          {icon}
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        {eyebrow && (
+          <p className="text-[11px] font-bold tracking-wider text-gold-600 uppercase">
+            {eyebrow}
+          </p>
+        )}
+        <h1 className="text-2xl font-extrabold tracking-tight text-navy-900 text-balance">
+          {title}
+        </h1>
+        {subtitle && <p className="mt-1 text-sm text-navy-500">{subtitle}</p>}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  )
+}
+
+/* ---------- SectionHeader ---------- */
+// 섹션 제목 + 선택적 아이콘/우측 액션(예: "더보기" 링크)
+export function SectionHeader({
+  title,
+  icon,
+  action,
+  className,
+}: {
+  title: string
+  icon?: ReactNode
+  action?: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn('mb-2.5 flex items-center gap-2', className)}>
+      {icon && <span className="text-navy-500">{icon}</span>}
+      <h2 className="text-[17px] font-extrabold tracking-tight text-navy-900">
+        {title}
+      </h2>
+      {action && <div className="ml-auto">{action}</div>}
+    </div>
+  )
+}
+
+/* ---------- StatCard ---------- */
+const statTones: Record<string, string> = {
+  navy: 'bg-navy-100 text-navy-700',
+  gold: 'bg-gold-400/25 text-gold-600',
+  emerald: 'bg-emerald-100 text-emerald-600',
+  rose: 'bg-rose-100 text-rose-600',
+}
+
+export function StatCard({
+  icon,
+  label,
+  value,
+  sub,
+  tone = 'navy',
+}: {
+  icon?: ReactNode
+  label: string
+  value: ReactNode
+  sub?: string
+  tone?: 'navy' | 'gold' | 'emerald' | 'rose'
+}) {
+  return (
+    <div className="rounded-2xl border border-navy-100/80 bg-white p-4 shadow-card">
+      {icon && (
+        <div
+          className={cn(
+            'mb-2 flex size-9 items-center justify-center rounded-xl',
+            statTones[tone],
+          )}
+        >
+          {icon}
+        </div>
+      )}
+      <p className="text-2xl font-extrabold tracking-tight text-navy-900">
+        {value}
+      </p>
+      <p className="mt-0.5 text-xs font-medium text-navy-400">
+        {label}
+        {sub && <span className="ml-1 text-navy-300">· {sub}</span>}
+      </p>
+    </div>
+  )
+}
+
+/* ---------- Disclosure (접이식 카드) ----------
+   비제어(defaultOpen) 또는 제어(open + onToggle) 모두 지원.
+   제어 모드는 제출 후 자동 접힘 같은 외부 상태 연동에 사용. */
+export function Disclosure({
+  icon,
+  title,
+  defaultOpen,
+  open: openProp,
+  onToggle,
+  children,
+}: {
+  icon?: ReactNode
+  title: string
+  defaultOpen?: boolean
+  open?: boolean
+  onToggle?: (next: boolean) => void
+  children: ReactNode
+}) {
+  const [internal, setInternal] = useState(defaultOpen ?? false)
+  const open = openProp ?? internal
+  const toggle = () => (onToggle ? onToggle(!open) : setInternal((v) => !v))
+  return (
+    <Card className="overflow-hidden">
+      <button
+        type="button"
+        onClick={toggle}
+        className="press flex w-full items-center gap-2 p-4 text-left font-bold text-navy-800"
+      >
+        {icon && <span className="text-navy-500">{icon}</span>}
+        {title}
+        <ChevronDown
+          className={cn(
+            'ml-auto size-4 text-navy-400 transition-transform',
+            open && 'rotate-180',
+          )}
+        />
+      </button>
+      {open && <div className="border-t border-navy-50 p-4 pt-4">{children}</div>}
+    </Card>
+  )
+}
+
+/* ---------- SegmentedControl (탭/세그먼트) ---------- */
+export function SegmentedControl<T extends string>({
+  value,
+  onChange,
+  options,
+  className,
+}: {
+  value: T
+  onChange: (v: T) => void
+  options: { value: T; label: ReactNode }[]
+  className?: string
+}) {
+  return (
+    <div
+      className={cn(
+        'flex gap-1 rounded-2xl bg-navy-100/70 p-1',
+        className,
+      )}
+    >
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={() => onChange(o.value)}
+          className={cn(
+            'press flex-1 whitespace-nowrap rounded-xl px-2.5 py-2 text-sm font-bold transition-colors',
+            value === o.value
+              ? 'bg-white text-navy-900 shadow-card'
+              : 'text-navy-500 hover:text-navy-700',
+          )}
+        >
+          {o.label}
+        </button>
       ))}
     </div>
   )

@@ -37,7 +37,7 @@ const statusBar: Record<string, string> = {
 export function RequestCard({ req }: { req: RequestItem }) {
   return (
     <Link to={`/requests/${req._id}`} className="press block">
-      <Card className="relative overflow-hidden p-4 pl-5 hover:shadow-soft">
+      <Card className="lift relative overflow-hidden p-4 pl-5 hover:border-navy-200 hover:shadow-soft">
         <span
           className={`absolute inset-y-0 left-0 w-1.5 ${statusBar[req.status] ?? 'bg-navy-300'}`}
         />
@@ -86,7 +86,7 @@ export function MemberCard({ member }: { member: PublicMember }) {
     .join(' · ')
   return (
     <Link to={`/members/${member._id}`} className="press block">
-      <Card className="flex items-center gap-3.5 p-3.5 hover:shadow-soft">
+      <Card className="lift flex items-center gap-3.5 p-3.5 hover:border-navy-200 hover:shadow-soft">
         <Avatar name={member.name} size="md" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
