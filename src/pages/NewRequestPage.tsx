@@ -9,6 +9,7 @@ import {
   Card,
   Field,
   Input,
+  PageHeader,
   Select,
   TagSuggest,
   Textarea,
@@ -81,7 +82,7 @@ export function NewRequestPage() {
         <ChevronLeft className="size-4" />
         뒤로
       </button>
-      <h1 className="text-2xl font-extrabold text-navy-900">도움요청 등록</h1>
+      <PageHeader eyebrow="알비연 링크" title="도움요청 등록" />
 
       <Card className="p-5">
         <form onSubmit={onSubmit} className="space-y-4">

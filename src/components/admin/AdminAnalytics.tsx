@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { useQuery } from 'convex/react'
 import {
   Users,
@@ -9,7 +8,7 @@ import {
   Gauge,
 } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
-import { Card, LoadingScreen } from '../ui'
+import { Card, LoadingScreen, SectionHeader, StatCard } from '../ui'
 import {
   contributionLabel,
   formatCohort,
@@ -27,34 +26,38 @@ export function AdminAnalytics({ token }: { token: string }) {
     <div className="space-y-6">
       {/* 회원 요약 */}
       <section>
-        <SectionTitle>회원 요약</SectionTitle>
+        <SectionHeader title="회원 요약" />
         <div className="grid grid-cols-2 gap-3">
-          <Stat icon={<Users className="size-5" />} label="전체 회원" value={m.total} />
-          <Stat
+          <StatCard icon={<Users className="size-5" />} label="전체 회원" value={m.total} />
+          <StatCard
             icon={<UserCheck className="size-5" />}
             label="활성"
             value={m.active}
-            accent
+            tone="emerald"
           />
-          <Stat icon={<Clock className="size-5" />} label="승인 대기" value={m.pending} />
-          <Stat icon={<UserX className="size-5" />} label="비활성" value={m.suspended} />
-          <Stat
+          <StatCard icon={<Clock className="size-5" />} label="승인 대기" value={m.pending} />
+          <StatCard icon={<UserX className="size-5" />} label="비활성" value={m.suspended} />
+          <StatCard
             icon={<UserPlus className="size-5" />}
             label="이번 달 신규"
             value={m.newThisMonth}
           />
-          <Stat
+          <StatCard
             icon={<Gauge className="size-5" />}
             label="평균 완성률"
-            value={data.avgCompletion}
-            suffix="%"
+            value={
+              <>
+                {data.avgCompletion}
+                <span className="text-base">%</span>
+              </>
+            }
           />
         </div>
       </section>
 
       {/* 분포 막대 */}
       <section className="space-y-4">
-        <SectionTitle>회원 분포</SectionTitle>
+        <SectionHeader title="회원 분포" />
         <BarChart title="기수별" data={data.cohorts} labelFmt={formatCohort} />
         <BarChart title="학교별" data={data.universities} />
         <BarChart title="업종별" data={data.industries} />
@@ -63,7 +66,7 @@ export function AdminAnalytics({ token }: { token: string }) {
 
       {/* 요청 퍼널 */}
       <section>
-        <SectionTitle>요청 퍼널</SectionTitle>
+        <SectionHeader title="요청 퍼널" />
         <Card className="p-4">
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
             <FunnelRow label="전체 요청" value={data.requests.total} />
@@ -90,7 +93,7 @@ export function AdminAnalytics({ token }: { token: string }) {
 
       {/* 교류 퍼널 */}
       <section>
-        <SectionTitle>교류 퍼널</SectionTitle>
+        <SectionHeader title="교류 퍼널" />
         <Card className="p-4">
           <div className="mb-4 flex items-end justify-between">
             <div>
@@ -114,7 +117,7 @@ export function AdminAnalytics({ token }: { token: string }) {
 
       {/* 기여 분석 */}
       <section>
-        <SectionTitle>기여 분석</SectionTitle>
+        <SectionHeader title="기여 분석" />
         <Card className="space-y-4 p-4">
           <div>
             <p className="text-3xl font-extrabold text-gold-600">
@@ -136,7 +139,7 @@ export function AdminAnalytics({ token }: { token: string }) {
 
       {/* 활발한 교류 회원 */}
       <section>
-        <SectionTitle>활발한 교류 회원</SectionTitle>
+        <SectionHeader title="활발한 교류 회원" />
         {data.topConnectors.length === 0 ? (
           <Card className="p-5 text-center text-sm text-navy-400">
             아직 연결된 교류가 없습니다.
@@ -164,44 +167,6 @@ export function AdminAnalytics({ token }: { token: string }) {
 }
 
 /* ---------- 사설 헬퍼 ---------- */
-
-function SectionTitle({ children }: { children: ReactNode }) {
-  return (
-    <h2 className="mb-2.5 text-lg font-extrabold text-navy-900">{children}</h2>
-  )
-}
-
-// 회원 요약 Stat 카드 (AdminDashboardPage의 Stat 패턴 참고, suffix 추가)
-function Stat({
-  icon,
-  label,
-  value,
-  suffix,
-  accent,
-}: {
-  icon: ReactNode
-  label: string
-  value: number
-  suffix?: string
-  accent?: boolean
-}) {
-  return (
-    <Card className="p-4">
-      <div
-        className={`mb-1.5 flex size-9 items-center justify-center rounded-xl ${
-          accent ? 'bg-emerald-100 text-emerald-600' : 'bg-navy-100 text-navy-700'
-        }`}
-      >
-        {icon}
-      </div>
-      <p className="text-2xl font-extrabold text-navy-900">
-        {value}
-        {suffix && <span className="text-base">{suffix}</span>}
-      </p>
-      <p className="text-xs font-medium text-navy-400">{label}</p>
-    </Card>
-  )
-}
 
 // 퍼널 셀 (라벨 + 카운트)
 function FunnelRow({

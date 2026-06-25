@@ -21,7 +21,9 @@ import {
   Button,
   Card,
   Chip,
+  Disclosure,
   LoadingScreen,
+  SectionHeader,
   ShareButton,
   Skeleton,
   Textarea,
@@ -197,9 +199,7 @@ export function MemberDetailPage() {
       {/* 이 회원의 도움요청 */}
       {requests && requests.length > 0 && (
         <section>
-          <h2 className="mb-2.5 text-lg font-extrabold text-navy-900">
-            올린 도움요청
-          </h2>
+          <SectionHeader title="올린 도움요청" />
           <div className="space-y-2.5">
             {requests.map((r) => (
               <RequestCard key={r._id} req={{ ...r, author: null }} />
@@ -211,9 +211,7 @@ export function MemberDetailPage() {
       {/* 기여 이력 */}
       {contributions && contributions.length > 0 && (
         <section>
-          <h2 className="mb-2.5 text-lg font-extrabold text-navy-900">
-            기여 이력
-          </h2>
+          <SectionHeader title="기여 이력" />
           <Card className="divide-y divide-navy-50">
             {contributions.map((c) => (
               <div key={c._id} className="flex items-center gap-3 px-4 py-3">
@@ -416,21 +414,17 @@ function ConnectCta({
   // 교류 이력 없음(declined 포함) → 접이식 신청 폼
   if (status === null) {
     return (
-      <Card className="space-y-3 p-4">
-        {!open ? (
-          <Button
-            className="w-full"
-            onClick={() => {
-              setOpen(true)
-              setError('')
-            }}
-          >
-            <UserPlus className="size-4.5" />
-            {profileName} 님에게 교류 신청
-          </Button>
-        ) : (
+      <div className="space-y-3">
+        <Disclosure
+          icon={<UserPlus className="size-4.5" />}
+          title={`${profileName} 님에게 교류 신청`}
+          open={open}
+          onToggle={(next) => {
+            setOpen(next)
+            if (next) setError('')
+          }}
+        >
           <form onSubmit={onRequest} className="space-y-3">
-            <p className="font-bold text-navy-800">교류 신청</p>
             <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
               {topicPresets.map((t) => (
                 <Chip
@@ -466,11 +460,11 @@ function ConnectCta({
               </Button>
             </div>
           </form>
-        )}
+        </Disclosure>
         <p className="text-center text-xs text-navy-400">
           상대가 수락하면 서로 연락처가 공개됩니다.
         </p>
-      </Card>
+      </div>
     )
   }
 

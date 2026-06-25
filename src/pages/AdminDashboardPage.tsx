@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useQuery } from 'convex/react'
+import { ShieldCheck } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { useSession } from '../lib/session'
-import { Chip, LoadingScreen } from '../components/ui'
+import { LoadingScreen, PageHeader, SegmentedControl } from '../components/ui'
 import { AdminOverview } from '../components/admin/AdminOverview'
 import { AdminMembers } from '../components/admin/AdminMembers'
 import { AdminConnections } from '../components/admin/AdminConnections'
@@ -31,12 +32,19 @@ export function AdminDashboardPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-extrabold text-navy-900">운영진 콘솔</h1>
+      <PageHeader
+        eyebrow="ADMIN"
+        title="운영진 콘솔"
+        icon={<ShieldCheck className="size-5" />}
+      />
 
       {/* 세그먼트 탭 */}
-      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
-        {tabs.map((t) => (
-          <Chip key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>
+      <SegmentedControl
+        value={tab}
+        onChange={setTab}
+        options={tabs.map((t) => ({
+          value: t.key,
+          label: (
             <span className="inline-flex items-center gap-1.5">
               {t.label}
               {t.key === 'members' && pendingMembers > 0 && (
@@ -45,9 +53,9 @@ export function AdminDashboardPage() {
                 </span>
               )}
             </span>
-          </Chip>
-        ))}
-      </div>
+          ),
+        }))}
+      />
 
       {/* 활성 탭만 마운트 */}
       {tab === 'overview' && <AdminOverview token={token} />}

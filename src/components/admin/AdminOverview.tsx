@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from 'convex/react'
 import {
@@ -17,10 +17,13 @@ import {
   Badge,
   Button,
   Card,
+  Disclosure,
   Field,
   Input,
   LoadingScreen,
+  SectionHeader,
   Select,
+  StatCard,
 } from '../ui'
 import {
   contributionLabel,
@@ -135,45 +138,40 @@ export function AdminOverview({ token }: { token: string }) {
     <div className="space-y-5">
       {/* 통계 */}
       <div className="grid grid-cols-2 gap-3">
-        <Stat
+        <StatCard
           icon={<Users className="size-5" />}
           label="활성 회원"
           value={s.activeMembers}
           sub={s.pendingMembers > 0 ? `승인대기 ${s.pendingMembers}` : undefined}
         />
-        <Stat
+        <StatCard
           icon={<Inbox className="size-5" />}
           label="접수 요청"
           value={s.openRequests}
           sub={`전체 ${s.totalRequests}`}
         />
-        <Stat
+        <StatCard
           icon={<Handshake className="size-5" />}
           label="매칭중"
           value={s.matchingRequests}
+          tone="gold"
         />
-        <Stat
+        <StatCard
           icon={<CheckCircle2 className="size-5" />}
           label="연결 완료"
           value={s.totalConnections}
-          accent
+          tone="emerald"
         />
       </div>
 
       {/* 회원 등록 */}
-      <Card className="p-4">
-        <button
-          onClick={() => setShowReg((v) => !v)}
-          className="flex w-full items-center gap-2 font-bold text-navy-800"
-        >
-          <UserPlus className="size-4" />
-          신규 회원 등록
-          <span className="ml-auto text-sm font-normal text-navy-400">
-            {showReg ? '닫기' : '열기'}
-          </span>
-        </button>
-        {showReg && (
-          <form onSubmit={onRegister} className="mt-3 space-y-3">
+      <Disclosure
+        title="신규 회원 등록"
+        icon={<UserPlus className="size-4" />}
+        open={showReg}
+        onToggle={setShowReg}
+      >
+        <form onSubmit={onRegister} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <Field label="이름" required>
                 <Input
@@ -226,24 +224,17 @@ export function AdminOverview({ token }: { token: string }) {
             >
               등록
             </Button>
-          </form>
-        )}
-      </Card>
+        </form>
+      </Disclosure>
 
       {/* 수동 기여 적립 (후원·행사 운영·온보딩 등) */}
-      <Card className="p-4">
-        <button
-          onClick={() => setShowAward((v) => !v)}
-          className="flex w-full items-center gap-2 font-bold text-navy-800"
-        >
-          <Award className="size-4" />
-          기여 적립
-          <span className="ml-auto text-sm font-normal text-navy-400">
-            {showAward ? '닫기' : '열기'}
-          </span>
-        </button>
-        {showAward && (
-          <form onSubmit={onAward} className="mt-3 space-y-3">
+      <Disclosure
+        title="기여 적립"
+        icon={<Award className="size-4" />}
+        open={showAward}
+        onToggle={setShowAward}
+      >
+        <form onSubmit={onAward} className="space-y-3">
             <Field label="회원" required>
               <Select
                 value={award.memberId}
@@ -311,17 +302,16 @@ export function AdminOverview({ token }: { token: string }) {
             >
               적립
             </Button>
-          </form>
-        )}
-      </Card>
+        </form>
+      </Disclosure>
 
       {/* 승인 대기 회원 */}
       {data.pendingMembers.length > 0 && (
         <section>
-          <h2 className="mb-2.5 flex items-center gap-1.5 text-lg font-extrabold text-navy-900">
-            <UserCheck className="size-5" />
-            승인 대기 회원
-          </h2>
+          <SectionHeader
+            title="승인 대기 회원"
+            icon={<UserCheck className="size-5" />}
+          />
           <Card className="divide-y divide-navy-50">
             {data.pendingMembers.map((m) => (
               <div key={m._id} className="flex items-center gap-3 px-4 py-3">
@@ -347,9 +337,7 @@ export function AdminOverview({ token }: { token: string }) {
       {/* 프로필 미작성 회원 */}
       {incompleteMembers.length > 0 && (
         <section>
-          <h2 className="mb-2.5 text-lg font-extrabold text-navy-900">
-            프로필 미작성 회원
-          </h2>
+          <SectionHeader title="프로필 미작성 회원" />
           <Card className="divide-y divide-navy-50">
             {incompleteMembers.map(({ m, c }) => (
               <Link
@@ -381,9 +369,7 @@ export function AdminOverview({ token }: { token: string }) {
 
       {/* 처리 대기 요청 */}
       <section>
-        <h2 className="mb-2.5 text-lg font-extrabold text-navy-900">
-          처리 대기 요청
-        </h2>
+        <SectionHeader title="처리 대기 요청" />
         {data.pendingRequests.length === 0 ? (
           <Card className="p-5 text-center text-sm text-navy-400">
             처리할 요청이 없습니다. 👍
@@ -392,7 +378,7 @@ export function AdminOverview({ token }: { token: string }) {
           <div className="space-y-2.5">
             {data.pendingRequests.map((r) => (
               <Link key={r._id} to={`/requests/${r._id}`} className="press block">
-                <Card className="p-4 hover:shadow-soft">
+                <Card className="p-4 lift hover:border-navy-200 hover:shadow-soft">
                   <div className="mb-1 flex items-center gap-2">
                     <Badge className={requestStatusTone[r.status]}>
                       {requestStatusLabel[r.status]}
@@ -417,36 +403,5 @@ export function AdminOverview({ token }: { token: string }) {
         )}
       </section>
     </div>
-  )
-}
-
-function Stat({
-  icon,
-  label,
-  value,
-  sub,
-  accent,
-}: {
-  icon: ReactNode
-  label: string
-  value: number
-  sub?: string
-  accent?: boolean
-}) {
-  return (
-    <Card className="p-4">
-      <div
-        className={`mb-1.5 flex size-9 items-center justify-center rounded-xl ${
-          accent ? 'bg-emerald-100 text-emerald-600' : 'bg-navy-100 text-navy-700'
-        }`}
-      >
-        {icon}
-      </div>
-      <p className="text-2xl font-extrabold text-navy-900">{value}</p>
-      <p className="text-xs font-medium text-navy-400">
-        {label}
-        {sub && <span className="ml-1 text-navy-300">· {sub}</span>}
-      </p>
-    </Card>
   )
 }

@@ -9,8 +9,9 @@ import {
   Badge,
   Button,
   Card,
-  Chip,
   EmptyState,
+  PageHeader,
+  SegmentedControl,
   SkeletonList,
 } from '../components/ui'
 import {
@@ -45,10 +46,10 @@ type ConnectionItem = {
   phone?: string
 }
 
-const segments: { key: Segment; label: string }[] = [
-  { key: 'received', label: '받은' },
-  { key: 'sent', label: '보낸' },
-  { key: 'connected', label: '연결' },
+const segments: { value: Segment; label: string }[] = [
+  { value: 'received', label: '받은' },
+  { value: 'sent', label: '보낸' },
+  { value: 'connected', label: '연결' },
 ]
 
 export function ConnectionsPage() {
@@ -93,7 +94,11 @@ export function ConnectionsPage() {
   if (!token) {
     return (
       <div className="space-y-4">
-        <PageHeader />
+        <PageHeader
+          title="교류"
+          subtitle="교류를 수락하면 서로 연락처가 공개됩니다."
+          icon={<Users className="size-5" />}
+        />
         <EmptyState
           icon={<Users className="size-10" />}
           title="로그인이 필요합니다"
@@ -132,20 +137,18 @@ export function ConnectionsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader />
+      <PageHeader
+        title="교류"
+        subtitle="교류를 수락하면 서로 연락처가 공개됩니다."
+        icon={<Users className="size-5" />}
+      />
 
       {/* 세그먼트 */}
-      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
-        {segments.map((s) => (
-          <Chip
-            key={s.key}
-            active={segment === s.key}
-            onClick={() => setSegment(s.key)}
-          >
-            {s.label}
-          </Chip>
-        ))}
-      </div>
+      <SegmentedControl
+        value={segment}
+        onChange={setSegment}
+        options={segments}
+      />
 
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
@@ -306,17 +309,6 @@ export function ConnectionsPage() {
             ))}
         </div>
       )}
-    </div>
-  )
-}
-
-function PageHeader() {
-  return (
-    <div>
-      <h1 className="text-2xl font-extrabold text-navy-900">교류</h1>
-      <p className="mt-1 text-sm text-navy-500">
-        교류를 수락하면 서로 연락처가 공개됩니다.
-      </p>
     </div>
   )
 }

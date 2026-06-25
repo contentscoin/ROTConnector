@@ -53,7 +53,7 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto flex min-h-dvh max-w-[480px] flex-col bg-navy-50">
       {/* Header */}
-      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-navy-100 bg-white/90 px-4 backdrop-blur">
+      <header className="glass sticky top-0 z-20 flex h-14 items-center justify-between border-b border-navy-100 px-4">
         <Link to="/" className="flex items-center gap-2">
           <span className="flex size-7 items-center justify-center rounded-lg bg-navy-800 text-xs font-black text-gold-400">
             ROT
@@ -98,7 +98,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <main className="flex-1 px-4 pt-4 pb-32">{children}</main>
 
       {/* Bottom Nav */}
-      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-[480px] items-stretch border-t border-navy-100 bg-white/95 px-2 pt-1.5 backdrop-blur">
+      <nav className="glass safe-bottom fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-[480px] items-stretch border-t border-navy-100 px-2 pt-1.5">
         {visibleTabs.map(({ to, label, icon: Icon }) => {
           const active =
             to === '/' ? pathname === '/' : pathname.startsWith(to)

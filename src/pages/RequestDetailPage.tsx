@@ -19,6 +19,7 @@ import {
   Button,
   Card,
   LoadingScreen,
+  SectionHeader,
   Select,
   ShareButton,
 } from '../components/ui'
@@ -201,14 +202,16 @@ export function RequestDetailPage() {
 
       {/* 매칭 현황 */}
       <section>
-        <h2 className="mb-2.5 text-lg font-extrabold text-navy-900">
-          매칭 현황
-          {matches && matches.length > 0 && (
-            <span className="ml-1.5 text-sm font-bold text-navy-400">
-              {matches.length}
-            </span>
-          )}
-        </h2>
+        <SectionHeader
+          title="매칭 현황"
+          action={
+            matches && matches.length > 0 ? (
+              <span className="text-sm font-bold text-navy-400">
+                {matches.length}
+              </span>
+            ) : undefined
+          }
+        />
 
         {matches === undefined ? (
           <Card className="p-4 text-center text-sm text-navy-400">불러오는 중…</Card>

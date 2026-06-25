@@ -32,18 +32,20 @@ export function LoginPage() {
   }
 
   return (
-    <div className="mx-auto max-w-sm pt-8">
-      <div className="mb-6 text-center">
-        <div className="mx-auto mb-3 flex size-14 items-center justify-center rounded-2xl bg-navy-800 text-sm font-black text-gold-400">
+    <div className="mx-auto max-w-sm pt-10 animate-rise">
+      <div className="mb-7 text-center">
+        <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-navy-800 text-base font-black text-gold-400 shadow-elevated">
           ROT
         </div>
-        <h1 className="text-xl font-extrabold text-navy-900">알비연 링크</h1>
-        <p className="mt-1 text-sm text-navy-400">
+        <h1 className="text-2xl font-extrabold tracking-tight text-navy-900 text-balance">
+          알비연 링크
+        </h1>
+        <p className="mt-1.5 text-sm text-navy-400">
           회원 휴대폰 번호로 로그인하세요.
         </p>
       </div>
 
-      <Card className="p-5">
+      <Card className="p-5 shadow-elevated">
         <form onSubmit={onSubmit} className="space-y-4">
           <Field label="휴대폰 번호" required>
             <Input

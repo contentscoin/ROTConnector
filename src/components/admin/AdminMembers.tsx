@@ -181,7 +181,7 @@ function MemberRow({
         : { label: '활성화', next: 'active' as const }
 
   return (
-    <Card className="p-4">
+    <Card className="p-4 lift hover:border-navy-200 hover:shadow-soft">
       {/* 헤더: 이름 + 상태/운영진 뱃지 */}
       <div className="flex items-center gap-2">
         <span className="truncate font-bold text-navy-900">{m.name}</span>

@@ -2,7 +2,15 @@ import { useState } from 'react'
 import { useQuery } from 'convex/react'
 import { MessageSquare } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
-import { Avatar, Badge, Card, Chip, EmptyState, SkeletonList } from '../ui'
+import {
+  Avatar,
+  Badge,
+  Card,
+  EmptyState,
+  SegmentedControl,
+  SkeletonList,
+  StatCard,
+} from '../ui'
 import {
   connectionStatusLabel,
   connectionStatusTone,
@@ -27,25 +35,19 @@ export function AdminConnections({ token }: { token: string }) {
   return (
     <div className="space-y-4">
       {/* 카운트 요약 */}
-      <Card className="flex items-stretch divide-x divide-navy-50 px-2 py-3">
-        <CountCell label="전체" value={data?.counts.total} />
-        <CountCell label="대기" value={data?.counts.pending} />
-        <CountCell label="연결됨" value={data?.counts.accepted} accent />
-        <CountCell label="거절됨" value={data?.counts.declined} />
-      </Card>
-
-      {/* 상태 필터 칩 */}
-      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
-        {filters.map((f) => (
-          <Chip
-            key={f.key}
-            active={status === f.key}
-            onClick={() => setStatus(f.key)}
-          >
-            {f.label}
-          </Chip>
-        ))}
+      <div className="grid grid-cols-4 gap-2">
+        <StatCard label="전체" value={data?.counts.total ?? '–'} />
+        <StatCard label="대기" value={data?.counts.pending ?? '–'} />
+        <StatCard label="연결됨" value={data?.counts.accepted ?? '–'} tone="emerald" />
+        <StatCard label="거절됨" value={data?.counts.declined ?? '–'} />
       </div>
+
+      {/* 상태 필터 */}
+      <SegmentedControl
+        value={status}
+        onChange={setStatus}
+        options={filters.map((f) => ({ value: f.key, label: f.label }))}
+      />
 
       {data === undefined ? (
         <SkeletonList count={4} />
@@ -87,30 +89,6 @@ export function AdminConnections({ token }: { token: string }) {
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-// 카운트 요약 셀
-function CountCell({
-  label,
-  value,
-  accent,
-}: {
-  label: string
-  value?: number
-  accent?: boolean
-}) {
-  return (
-    <div className="flex-1 px-2 text-center">
-      <p
-        className={`text-xl font-extrabold ${
-          accent ? 'text-emerald-600' : 'text-navy-900'
-        }`}
-      >
-        {value ?? '–'}
-      </p>
-      <p className="text-xs font-medium text-navy-400">{label}</p>
     </div>
   )
 }

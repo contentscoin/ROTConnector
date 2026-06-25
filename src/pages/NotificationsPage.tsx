@@ -15,7 +15,13 @@ import {
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { useSession } from '../lib/session'
-import { Button, Card, EmptyState, SkeletonList } from '../components/ui'
+import {
+  Button,
+  Card,
+  EmptyState,
+  PageHeader,
+  SkeletonList,
+} from '../components/ui'
 import { timeAgo } from '../lib/format'
 import {
   enableWebPush,
@@ -121,18 +127,21 @@ export function NotificationsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold text-navy-900">알림</h1>
-        {hasUnread && token && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => void markAllRead({ token }).catch(() => {})}
-          >
-            모두 읽음
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="알림"
+        icon={<Bell className="size-5" />}
+        action={
+          hasUnread && token ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void markAllRead({ token }).catch(() => {})}
+            >
+              모두 읽음
+            </Button>
+          ) : undefined
+        }
+      />
 
       {/* 웹 푸시 켜기 (Firebase 설정·브라우저 지원·권한 미허용 시) */}
       {showPushBanner && (
@@ -176,8 +185,9 @@ export function NotificationsPage() {
             return (
               <Card
                 key={n._id}
+                interactive
                 onClick={() => open(n)}
-                className={`press flex cursor-pointer items-start gap-3 p-4 ${
+                className={`flex items-start gap-3 p-4 ${
                   n.read ? '' : 'ring-1 ring-navy-200'
                 }`}
               >

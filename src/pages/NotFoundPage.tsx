@@ -4,12 +4,14 @@ import { Button } from '../components/ui'
 
 export function NotFoundPage() {
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-      <Compass className="size-12 text-navy-300" />
-      <h1 className="mt-4 text-2xl font-extrabold text-navy-900">
+    <div className="flex min-h-[60vh] flex-col items-center justify-center text-center animate-rise">
+      <div className="flex size-16 items-center justify-center rounded-2xl bg-navy-50 text-navy-300 ring-1 ring-navy-100 shadow-card">
+        <Compass className="size-9" />
+      </div>
+      <h1 className="mt-5 text-2xl font-extrabold tracking-tight text-navy-900 text-balance">
         페이지를 찾을 수 없습니다
       </h1>
-      <p className="mt-1 text-sm text-navy-400">
+      <p className="mt-1.5 text-sm text-navy-400">
         주소가 변경되었거나 삭제되었을 수 있습니다.
       </p>
       <Link to="/" className="mt-6">

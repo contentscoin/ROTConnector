@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import { Search, X, Users, UserRoundPen, ChevronRight } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
-import { Chip, EmptyState, Input, SkeletonList } from '../components/ui'
+import { Chip, EmptyState, Input, PageHeader, SkeletonList } from '../components/ui'
 import { MemberCard } from '../components/cards'
 import { formatCohort } from '../lib/format'
 import { useSession } from '../lib/session'
@@ -41,12 +41,12 @@ export function MembersPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-extrabold text-navy-900">회원 찾기</h1>
-        <p className="text-sm text-navy-400">
-          {facets ? `총 ${facets.total}명` : ' '}
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="디렉토리"
+        title="회원 찾기"
+        subtitle={facets ? `총 ${facets.total}명` : ' '}
+        icon={<Users className="size-5" />}
+      />
 
       {member && (
         <Link to="/me" className="press block">

@@ -18,9 +18,12 @@ import {
   Badge,
   Button,
   Card,
+  Disclosure,
   EmptyState,
   Field,
   Input,
+  PageHeader,
+  SegmentedControl,
   Select,
   ShareButton,
   Spinner,
@@ -126,7 +129,11 @@ export function EventsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-extrabold text-navy-900">행사 · 후원</h1>
+      <PageHeader
+        eyebrow="ROTC"
+        title="행사 · 후원"
+        icon={<CalendarDays className="size-5" />}
+      />
 
       {actionError && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
@@ -136,19 +143,13 @@ export function EventsPage() {
 
       {/* 운영진: 행사/후원 등록 */}
       {isAdmin && (
-        <Card className="p-4">
-          <button
-            onClick={() => setShowForm((v) => !v)}
-            className="flex w-full items-center gap-2 font-bold text-navy-800"
-          >
-            <Plus className="size-4" />
-            행사 · 후원 등록
-            <span className="ml-auto text-sm font-normal text-navy-400">
-              {showForm ? '닫기' : '열기'}
-            </span>
-          </button>
-          {showForm && (
-            <form onSubmit={onCreate} className="mt-3 space-y-3">
+        <Disclosure
+          title="행사 · 후원 등록"
+          icon={<Plus className="size-4" />}
+          open={showForm}
+          onToggle={setShowForm}
+        >
+          <form onSubmit={onCreate} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <Field label="제목" required>
                   <Input
@@ -209,26 +210,15 @@ export function EventsPage() {
               >
                 등록
               </Button>
-            </form>
-          )}
-        </Card>
+          </form>
+        </Disclosure>
       )}
 
-      <div className="flex gap-2">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setFilter(t.key)}
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
-              filter === t.key
-                ? 'bg-navy-800 text-white'
-                : 'bg-white text-navy-600 border border-navy-200'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        value={filter}
+        onChange={setFilter}
+        options={tabs.map((t) => ({ value: t.key, label: t.label }))}
+      />
 
       {events === undefined ? (
         <div className="flex justify-center py-10">
@@ -242,7 +232,10 @@ export function EventsPage() {
       ) : (
         <div className="space-y-3">
           {events.map((e) => (
-            <Card key={e._id} className="p-5">
+            <Card
+              key={e._id}
+              className="p-5 lift hover:border-navy-200 hover:shadow-soft"
+            >
               <div className="mb-2 flex items-center gap-2">
                 <Badge
                   className={

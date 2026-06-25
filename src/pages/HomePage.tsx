@@ -12,7 +12,7 @@ import {
   School,
 } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
-import { Badge, Card, Spinner } from '../components/ui'
+import { Badge, Card, Spinner, SectionHeader, StatCard } from '../components/ui'
 import { RequestCard, MemberCard } from '../components/cards'
 import { formatCohort, formatDate } from '../lib/format'
 import { useSession } from '../lib/session'
@@ -47,7 +47,7 @@ export function HomePage() {
   return (
     <div className="space-y-7">
       {/* Hero */}
-      <section className="relative -mx-4 -mt-4 overflow-hidden rounded-b-[2rem] bg-gradient-to-br from-navy-800 to-navy-950 px-6 pt-7 pb-7 text-white shadow-soft">
+      <section className="relative -mx-4 -mt-4 overflow-hidden rounded-b-[2rem] bg-gradient-to-br from-navy-800 to-navy-950 px-6 pt-7 pb-7 text-white shadow-elevated">
         <div className="pointer-events-none absolute -top-16 -right-10 size-48 rounded-full bg-gold-500/20 blur-3xl" />
         <div className="relative">
           <span className="inline-flex items-center rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-gold-400 ring-1 ring-white/10">
@@ -88,7 +88,7 @@ export function HomePage() {
       {/* 프로필 완성 넛지 (로그인·미완성 시) */}
       {completeness && completeness.percent < 100 && (
         <Link to="/me" className="press block">
-          <Card className="flex items-center gap-3 p-4 hover:shadow-soft">
+          <Card className="flex items-center gap-3 p-4 lift hover:border-navy-200 hover:shadow-soft">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gold-400/20 text-gold-600">
               <UserPlus className="size-5" />
             </div>
@@ -111,7 +111,7 @@ export function HomePage() {
 
       {/* 최근 도움요청 */}
       <section>
-        <SectionHeader title="최근 도움요청" to="/requests" />
+        <HomeSection title="최근 도움요청" to="/requests" />
         {recent === undefined ? (
           <CenterSpinner />
         ) : recent.length === 0 ? (
@@ -132,7 +132,7 @@ export function HomePage() {
         peers &&
         (peers.cohortCount > 0 || peers.universityCount > 0 ? (
           <section>
-            <SectionHeader title="내 동기·동문" />
+            <HomeSection title="내 동기·동문" />
             <div className="grid grid-cols-2 gap-2.5">
               {peers.cohort && peers.cohortCount > 0 && (
                 <Link
@@ -143,17 +143,12 @@ export function HomePage() {
                       : 'col-span-2'
                   }`}
                 >
-                  <Card className="h-full p-4 hover:shadow-soft">
-                    <div className="mb-1.5 flex size-9 items-center justify-center rounded-xl bg-navy-100 text-navy-700">
-                      <GraduationCap className="size-5" />
-                    </div>
-                    <p className="text-lg font-extrabold text-navy-900">
-                      {peers.cohortCount}명
-                    </p>
-                    <p className="text-xs font-medium text-navy-400">
-                      {formatCohort(peers.cohort)} 동기
-                    </p>
-                  </Card>
+                  <StatCard
+                    icon={<GraduationCap className="size-5" />}
+                    tone="navy"
+                    value={`${peers.cohortCount}명`}
+                    label={`${formatCohort(peers.cohort)} 동기`}
+                  />
                 </Link>
               )}
               {peers.university && peers.universityCount > 0 && (
@@ -163,17 +158,12 @@ export function HomePage() {
                     peers.cohort && peers.cohortCount > 0 ? '' : 'col-span-2'
                   }`}
                 >
-                  <Card className="h-full p-4 hover:shadow-soft">
-                    <div className="mb-1.5 flex size-9 items-center justify-center rounded-xl bg-gold-400/20 text-gold-600">
-                      <School className="size-5" />
-                    </div>
-                    <p className="text-lg font-extrabold text-navy-900">
-                      {peers.universityCount}명
-                    </p>
-                    <p className="text-xs font-medium text-navy-400">
-                      {peers.university} 동문
-                    </p>
-                  </Card>
+                  <StatCard
+                    icon={<School className="size-5" />}
+                    tone="gold"
+                    value={`${peers.universityCount}명`}
+                    label={`${peers.university} 동문`}
+                  />
                 </Link>
               )}
             </div>
@@ -181,9 +171,9 @@ export function HomePage() {
         ) : !peers.cohort && !peers.university ? (
           // 기수·학교 미입력 넛지 (입력했는데 동기 0명이면 미표시)
           <section>
-            <SectionHeader title="내 동기·동문" />
+            <HomeSection title="내 동기·동문" />
             <Link to="/me" className="press block">
-              <Card className="flex items-center gap-3 p-4 hover:shadow-soft">
+              <Card className="flex items-center gap-3 p-4 lift hover:border-navy-200 hover:shadow-soft">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-navy-100 text-navy-700">
                   <GraduationCap className="size-5" />
                 </div>
@@ -202,7 +192,7 @@ export function HomePage() {
       {/* 추천 회원 (내 필요/업종 기반) */}
       {recommended && recommended.length > 0 && (
         <section>
-          <SectionHeader title="추천 회원" to="/members" />
+          <HomeSection title="추천 회원" to="/members" />
           <div className="space-y-2.5">
             {recommended.map((r) => (
               <div key={r.member._id} className="relative">
@@ -230,7 +220,7 @@ export function HomePage() {
 
       {/* 기여 랭킹 */}
       <section>
-        <SectionHeader title="기여 랭킹" />
+        <HomeSection title="기여 랭킹" />
         <Card className="divide-y divide-navy-50 p-1">
           {leaders === undefined ? (
             <CenterSpinner />
@@ -271,11 +261,11 @@ export function HomePage() {
       {/* 다가오는 행사 */}
       {upcoming && upcoming.length > 0 && (
         <section>
-          <SectionHeader title="다가오는 행사·후원" to="/events" />
+          <HomeSection title="다가오는 행사·후원" to="/events" />
           <div className="space-y-2.5">
             {upcoming.map((e) => (
               <Link key={e._id} to="/events" className="press block">
-                <Card className="flex items-center gap-3 p-4 hover:shadow-soft">
+                <Card className="flex items-center gap-3 p-4 lift hover:border-navy-200 hover:shadow-soft">
                   <div className="flex size-11 shrink-0 flex-col items-center justify-center rounded-xl bg-navy-800 text-white">
                     <CalendarDays className="size-5" />
                   </div>
@@ -296,20 +286,22 @@ export function HomePage() {
   )
 }
 
-function SectionHeader({ title, to }: { title: string; to?: string }) {
+function HomeSection({ title, to }: { title: string; to?: string }) {
   return (
-    <div className="mb-3 flex items-center justify-between">
-      <h2 className="text-lg font-extrabold text-navy-900">{title}</h2>
-      {to && (
-        <Link
-          to={to}
-          className="flex items-center text-sm font-semibold text-navy-500"
-        >
-          전체보기
-          <ChevronRight className="size-4" />
-        </Link>
-      )}
-    </div>
+    <SectionHeader
+      title={title}
+      action={
+        to && (
+          <Link
+            to={to}
+            className="flex items-center text-sm font-semibold text-navy-500"
+          >
+            전체보기
+            <ChevronRight className="size-4" />
+          </Link>
+        )
+      }
+    />
   )
 }
 

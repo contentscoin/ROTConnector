@@ -11,6 +11,7 @@ import {
   Card,
   Field,
   Input,
+  SectionHeader,
   Select,
   TagSuggest,
   Textarea,
@@ -98,7 +99,7 @@ export function MyProfilePage() {
   return (
     <div className="space-y-5">
       {/* 헤더 */}
-      <div className="flex items-center gap-4">
+      <Card className="flex items-center gap-4 p-5 shadow-elevated">
         <Avatar name={member.name} size="lg" />
         <div className="flex-1">
           <div className="flex items-center gap-2">
@@ -123,7 +124,7 @@ export function MyProfilePage() {
         >
           공개 프로필
         </Link>
-      </div>
+      </Card>
 
       {/* 프로필 완성도 */}
       {completeness.percent < 100 && (
@@ -283,14 +284,12 @@ export function MyProfilePage() {
 
       {/* 내 도움요청 */}
       <section>
-        <h2 className="mb-2.5 text-lg font-extrabold text-navy-900">
-          내 도움요청
-        </h2>
+        <SectionHeader title="내 도움요청" />
         {myRequests && myRequests.length > 0 ? (
           <div className="space-y-2.5">
             {myRequests.map((r) => (
               <Link key={r._id} to={`/requests/${r._id}`} className="press block">
-                <Card className="flex items-center gap-3 p-4 hover:shadow-soft">
+                <Card className="lift flex items-center gap-3 p-4 hover:border-navy-200 hover:shadow-soft">
                   <Badge className={requestStatusTone[r.status]}>
                     {requestStatusLabel[r.status]}
                   </Badge>

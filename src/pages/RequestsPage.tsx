@@ -3,7 +3,14 @@ import { Link } from 'react-router-dom'
 import { useQuery } from 'convex/react'
 import { Plus, Inbox, Search, X } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
-import { Chip, EmptyState, Input, SkeletonList } from '../components/ui'
+import {
+  Chip,
+  EmptyState,
+  Input,
+  PageHeader,
+  SegmentedControl,
+  SkeletonList,
+} from '../components/ui'
 import { RequestCard } from '../components/cards'
 import { useSession } from '../lib/session'
 
@@ -61,7 +68,11 @@ export function RequestsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-extrabold text-navy-900">도움요청</h1>
+      <PageHeader
+        eyebrow="회원 교류"
+        title="도움요청"
+        icon={<Inbox className="size-5" />}
+      />
 
       {/* 검색 */}
       <div className="relative">
@@ -84,17 +95,11 @@ export function RequestsPage() {
       </div>
 
       {/* 상태 필터 */}
-      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
-        {statusFilters.map((f) => (
-          <Chip
-            key={f.key}
-            active={status === f.key}
-            onClick={() => setStatus(f.key)}
-          >
-            {f.label}
-          </Chip>
-        ))}
-      </div>
+      <SegmentedControl
+        value={status}
+        onChange={setStatus}
+        options={statusFilters.map((f) => ({ value: f.key, label: f.label }))}
+      />
 
       {/* 카테고리 필터 */}
       <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
@@ -121,14 +126,15 @@ export function RequestsPage() {
         ) : (
           <span />
         )}
-        <div className="flex gap-2">
-          <Chip active={sort === 'recent'} onClick={() => setSort('recent')}>
-            최신순
-          </Chip>
-          <Chip active={sort === 'urgent'} onClick={() => setSort('urgent')}>
-            긴급순
-          </Chip>
-        </div>
+        <SegmentedControl
+          className="w-auto"
+          value={sort}
+          onChange={setSort}
+          options={[
+            { value: 'recent', label: '최신순' },
+            { value: 'urgent', label: '긴급순' },
+          ]}
+        />
       </div>
 
       {visible === undefined ? (

@@ -15,7 +15,14 @@ import {
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { useSession } from '../lib/session'
-import { Avatar, Badge, Card, LoadingScreen, ShareButton } from '../components/ui'
+import {
+  Avatar,
+  Badge,
+  Card,
+  LoadingScreen,
+  SectionHeader,
+  ShareButton,
+} from '../components/ui'
 import { formatCohort, formatDate } from '../lib/format'
 import { errorMessage } from '../lib/utils'
 
@@ -197,10 +204,10 @@ function AttendeeGroup({
   if (people.length === 0) return null
   return (
     <section>
-      <h2 className="mb-2 flex items-center gap-1.5 px-1 text-sm font-bold text-navy-700">
-        <Icon className="size-4" />
-        {title} {people.length}
-      </h2>
+      <SectionHeader
+        title={`${title} ${people.length}`}
+        icon={<Icon className="size-4" />}
+      />
       <div className="space-y-2">
         {people.map((p) => {
           const sub = [formatCohort(p.cohort), p.company || p.university]
@@ -208,7 +215,7 @@ function AttendeeGroup({
             .join(' · ')
           return (
             <Link key={p._id} to={`/members/${p._id}`} className="press block">
-              <Card className="flex items-center gap-3 p-3">
+              <Card className="flex items-center gap-3 p-3 lift hover:border-navy-200 hover:shadow-soft">
                 <Avatar name={p.name} size="sm" />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold text-navy-900">
