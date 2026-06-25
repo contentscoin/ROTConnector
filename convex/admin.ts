@@ -324,3 +324,32 @@ export const connections = query({
     return { counts, recent }
   },
 })
+
+// 운영진 감사 로그: 최신순. action 필터 옵션. 불변 기록이라 읽기 전용.
+export const auditLogs = query({
+  args: {
+    token: v.string(),
+    action: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { token, action, limit }) => {
+    await requireAdmin(ctx, token)
+    const take = Math.min(Math.max(limit ?? 100, 1), 200)
+    let rows = await ctx.db
+      .query('auditLogs')
+      .withIndex('by_created')
+      .order('desc')
+      .take(action ? 500 : take)
+    if (action) rows = rows.filter((r) => r.action === action).slice(0, take)
+    return rows.map((r) => ({
+      _id: r._id,
+      actorId: r.actorId,
+      actorName: r.actorName,
+      action: r.action,
+      targetId: r.targetId ?? null,
+      targetName: r.targetName ?? null,
+      detail: r.detail ?? null,
+      createdAt: r.createdAt,
+    }))
+  },
+})

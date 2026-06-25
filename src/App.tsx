@@ -11,6 +11,7 @@ import { RequestsPage } from './pages/RequestsPage'
 import { NewRequestPage } from './pages/NewRequestPage'
 import { RequestDetailPage } from './pages/RequestDetailPage'
 import { ConnectionsPage } from './pages/ConnectionsPage'
+import { NotificationsPage } from './pages/NotificationsPage'
 import { MyProfilePage } from './pages/MyProfilePage'
 import { AdminDashboardPage } from './pages/AdminDashboardPage'
 import { EventsPage } from './pages/EventsPage'
@@ -54,6 +55,14 @@ export default function App() {
           element={
             <Protected>
               <ConnectionsPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <Protected>
+              <NotificationsPage />
             </Protected>
           }
         />

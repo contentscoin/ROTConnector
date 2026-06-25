@@ -7,6 +7,7 @@ import {
   UserRound,
   ShieldCheck,
   LogIn,
+  Bell,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useQuery } from 'convex/react'
@@ -43,6 +44,11 @@ export function Layout({ children }: { children: ReactNode }) {
     api.connections.pendingReceivedCount,
     token ? { token } : 'skip',
   )
+  // 안 읽은 알림 수 (헤더 벨 뱃지)
+  const unreadCount = useQuery(
+    api.notifications.unreadCount,
+    token ? { token } : 'skip',
+  )
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-[480px] flex-col bg-navy-50">
@@ -57,12 +63,26 @@ export function Layout({ children }: { children: ReactNode }) {
           </span>
         </Link>
         {member ? (
-          <Link to="/me" className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-navy-700">
-              {member.name}
-            </span>
-            <Avatar name={member.name} size="sm" />
-          </Link>
+          <div className="flex items-center gap-1.5">
+            <Link
+              to="/notifications"
+              aria-label="알림"
+              className="relative flex size-9 items-center justify-center rounded-full text-navy-700 transition-colors hover:bg-navy-100"
+            >
+              <Bell className="size-[22px]" strokeWidth={2} />
+              {(unreadCount ?? 0) > 0 && (
+                <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {unreadCount! > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </Link>
+            <Link to="/me" className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-navy-700">
+                {member.name}
+              </span>
+              <Avatar name={member.name} size="sm" />
+            </Link>
+          </div>
         ) : (
           <Link
             to="/login"

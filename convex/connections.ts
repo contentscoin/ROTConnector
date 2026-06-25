@@ -2,6 +2,7 @@ import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { memberFromToken, requireMember, enforceRateLimit } from './auth'
+import { createNotification } from './notify'
 
 /**
  * 회원 간 1:1 교류 신청 (커피챗·협업 제안 등).
@@ -97,7 +98,7 @@ export const request = mutation({
       `connect:${me._id}`,
       '교류 신청이 너무 잦습니다. 잠시 후 다시 시도해주세요.',
     )
-    return await ctx.db.insert('connections', {
+    const connectionId = await ctx.db.insert('connections', {
       fromId: me._id,
       toId,
       message: msg,
@@ -105,6 +106,15 @@ export const request = mutation({
       status: 'pending',
       createdAt: Date.now(),
     })
+    // 수신자에게 교류 신청 알림
+    await createNotification(ctx, toId, {
+      type: 'connection.request',
+      title: `${me.name}님이 교류를 신청했어요`,
+      body: cleanTopic ? `주제: ${cleanTopic}` : undefined,
+      link: '/connections',
+      refId: connectionId,
+    })
+    return connectionId
   },
 })
 
@@ -129,6 +139,16 @@ export const respond = mutation({
       status: accept ? 'accepted' : 'declined',
       respondedAt: Date.now(),
     })
+    // 수락 시 신청자에게 알림 (거절은 알리지 않음 — 거절 통보의 부담 회피)
+    if (accept) {
+      await createNotification(ctx, conn.fromId, {
+        type: 'connection.accepted',
+        title: `${me.name}님이 교류 신청을 수락했어요`,
+        body: '이제 서로의 연락처를 확인할 수 있어요.',
+        link: '/connections',
+        refId: conn._id,
+      })
+    }
     return null
   },
 })

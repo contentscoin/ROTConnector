@@ -3,6 +3,8 @@ import { mutation, query } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { memberFromToken, requireMember, requireAdmin } from './auth'
 import { normalizeCohort, normalizeTags, termsOverlap } from './util'
+import { recordAudit } from './audit'
+import { createNotification } from './notify'
 
 function normalizePhone(phone: string): string {
   return phone.replace(/[^0-9]/g, '')
@@ -471,8 +473,21 @@ export const update = mutation({
 export const approve = mutation({
   args: { token: v.string(), memberId: v.id('members') },
   handler: async (ctx, { token, memberId }) => {
-    await requireAdmin(ctx, token)
+    const me = await requireAdmin(ctx, token)
+    const target = await ctx.db.get(memberId)
+    if (!target) throw new Error('회원을 찾을 수 없습니다.')
+    const wasInactive = target.status !== 'active'
     await ctx.db.patch(memberId, { status: 'active' })
+    await recordAudit(ctx, me, 'member.approve', target)
+    // 신규 승인일 때만 본인에게 알림 (이미 active면 중복 알림 방지)
+    if (wasInactive) {
+      await createNotification(ctx, memberId, {
+        type: 'member.approved',
+        title: '가입이 승인되었어요 🎉',
+        body: '이제 교류 신청과 도움 요청 등 모든 기능을 이용할 수 있어요.',
+        link: '/me',
+      })
+    }
     return null
   },
 })
@@ -494,8 +509,18 @@ export const setStatus = mutation({
     if (me._id === memberId && status !== 'active') {
       throw new Error('본인 계정은 비활성화할 수 없습니다.')
     }
+    const target = await ctx.db.get(memberId)
+    if (!target) throw new Error('회원을 찾을 수 없습니다.')
+    if (target.status === status) return null // 변경 없음 — 로그 미기록
     await ctx.db.patch(memberId, { status })
     // suspended 전환 시 기존 세션은 memberFromToken에서 자동 무효화되어 별도 삭제 불필요
+    const action =
+      status === 'active'
+        ? 'member.activate'
+        : status === 'pending'
+          ? 'member.setPending'
+          : 'member.suspend'
+    await recordAudit(ctx, me, action, target)
     return null
   },
 })
@@ -508,12 +533,15 @@ export const setAdmin = mutation({
     isAdmin: v.boolean(),
   },
   handler: async (ctx, { token, memberId, isAdmin }) => {
-    await requireAdmin(ctx, token)
-    const me = await memberFromToken(ctx, token)
-    if (me && me._id === memberId && !isAdmin) {
+    const me = await requireAdmin(ctx, token)
+    if (me._id === memberId && !isAdmin) {
       throw new Error('본인의 운영진 권한은 회수할 수 없습니다.')
     }
+    const target = await ctx.db.get(memberId)
+    if (!target) throw new Error('회원을 찾을 수 없습니다.')
+    if (target.isAdmin === isAdmin) return null // 변경 없음 — 로그 미기록
     await ctx.db.patch(memberId, { isAdmin })
+    await recordAudit(ctx, me, isAdmin ? 'admin.grant' : 'admin.revoke', target)
     return null
   },
 })

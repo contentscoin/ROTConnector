@@ -117,6 +117,32 @@ export default defineSchema({
     createdAt: v.number(),
   }),
 
+  // 인앱 알림센터. 회원에게 도달하는 이벤트(교류 신청/수락, 가입 승인 등)를 영속.
+  notifications: defineTable({
+    userId: v.id('members'), // 수신자
+    type: v.string(), // connection.request | connection.accepted | member.approved
+    title: v.string(),
+    body: v.optional(v.string()),
+    link: v.optional(v.string()), // 탭 시 이동할 앱 경로
+    refId: v.optional(v.string()), // 관련 connection/request id
+    read: v.boolean(),
+    createdAt: v.number(),
+  }).index('by_user', ['userId']),
+
+  // 운영진 행위 감사 로그 (불변 기록). actorName/targetName은 행위 시점 스냅샷 —
+  // 대상 회원이 이후 개명/삭제돼도 당시 기록을 보존하기 위함.
+  auditLogs: defineTable({
+    actorId: v.id('members'), // 행위자(운영진)
+    actorName: v.string(),
+    action: v.string(), // member.approve | member.activate | member.setPending | member.suspend | admin.grant | admin.revoke
+    targetId: v.optional(v.id('members')), // 대상 회원
+    targetName: v.optional(v.string()),
+    detail: v.optional(v.string()), // 부가 설명
+    createdAt: v.number(),
+  })
+    .index('by_created', ['createdAt'])
+    .index('by_target', ['targetId']),
+
   // 파일럿 경량 세션 (phone 클레임). Phase 2에 Convex Auth로 교체.
   sessions: defineTable({
     token: v.string(),

@@ -45,6 +45,25 @@ export const connectionStatusTone: Record<string, string> = {
   declined: 'bg-navy-100 text-navy-400',
 }
 
+// 감사 로그 액션 라벨/톤 (convex/audit.ts AuditAction과 1:1)
+export const auditActionLabel: Record<string, string> = {
+  'member.approve': '회원 승인',
+  'member.activate': '활성 전환',
+  'member.setPending': '대기 전환',
+  'member.suspend': '계정 정지',
+  'admin.grant': '운영진 지정',
+  'admin.revoke': '운영진 해제',
+}
+
+export const auditActionTone: Record<string, string> = {
+  'member.approve': 'bg-emerald-100 text-emerald-700',
+  'member.activate': 'bg-emerald-100 text-emerald-700',
+  'member.setPending': 'bg-gold-400/30 text-gold-600',
+  'member.suspend': 'bg-red-100 text-red-700',
+  'admin.grant': 'bg-navy-100 text-navy-700',
+  'admin.revoke': 'bg-navy-100 text-navy-400',
+}
+
 export const contributionLabel: Record<string, string> = {
   intro: '소개',
   consult: '상담',

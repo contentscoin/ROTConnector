@@ -7,14 +7,16 @@ import { AdminOverview } from '../components/admin/AdminOverview'
 import { AdminMembers } from '../components/admin/AdminMembers'
 import { AdminConnections } from '../components/admin/AdminConnections'
 import { AdminAnalytics } from '../components/admin/AdminAnalytics'
+import { AdminAudit } from '../components/admin/AdminAudit'
 
-type Tab = 'overview' | 'members' | 'connections' | 'analytics'
+type Tab = 'overview' | 'members' | 'connections' | 'analytics' | 'audit'
 
 const tabs: { key: Tab; label: string }[] = [
   { key: 'overview', label: '개요' },
   { key: 'members', label: '회원' },
   { key: 'connections', label: '교류' },
   { key: 'analytics', label: '통계' },
+  { key: 'audit', label: '기록' },
 ]
 
 export function AdminDashboardPage() {
@@ -52,6 +54,7 @@ export function AdminDashboardPage() {
       {tab === 'members' && <AdminMembers token={token} />}
       {tab === 'connections' && <AdminConnections token={token} />}
       {tab === 'analytics' && <AdminAnalytics token={token} />}
+      {tab === 'audit' && <AdminAudit token={token} />}
     </div>
   )
 }

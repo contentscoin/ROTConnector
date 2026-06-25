@@ -4,6 +4,12 @@ import type { MutationCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { matchStatus, contributionType } from './schema'
 import { requireAdmin } from './auth'
+import { createNotification } from './notify'
+
+// 알림 제목용 요청 제목 축약 (긴 제목이 알림을 망치지 않도록)
+function shortTitle(title: string): string {
+  return title.length > 40 ? `${title.slice(0, 40)}…` : title
+}
 
 // 기여 적립 + 회원 점수 가산 (내부 헬퍼). refId에 matchId를 넣어 롤백 추적.
 async function award(
@@ -139,6 +145,24 @@ export const propose = mutation({
       createdAt: Date.now(),
     })
     await recomputeRequestStatus(ctx, requestId)
+    const t = shortTitle(req.title)
+    const link = `/requests/${requestId}`
+    // 헬퍼: 도움 제공자로 매칭됨
+    await createNotification(ctx, helperId, {
+      type: 'match.proposed',
+      title: '도움 제공자로 매칭됐어요',
+      body: `'${t}' 요청에 운영진이 회원님을 연결했어요.`,
+      link,
+      refId: matchId,
+    })
+    // 작성자: 내 요청에 도움 제공자가 연결됨
+    await createNotification(ctx, req.authorId, {
+      type: 'request.matched',
+      title: `${helper.name}님이 도움 제공자로 연결됐어요`,
+      body: `'${t}' 요청의 매칭이 시작됐어요.`,
+      link,
+      refId: matchId,
+    })
     return matchId
   },
 })
@@ -198,6 +222,29 @@ export const complete = mutation({
       await award(ctx, match.brokeredBy, 'intro', brokerPoints, args.matchId, '중개')
     }
     await recomputeRequestStatus(ctx, match.requestId)
+
+    const t = shortTitle(req.title)
+    const link = `/requests/${match.requestId}`
+    const awardedHelper = Math.max(0, Math.min(1000, Math.round(helperPoints)))
+    // 작성자: 요청 연결 완료
+    await createNotification(ctx, req.authorId, {
+      type: 'request.connected',
+      title: '도움요청이 연결 완료됐어요 🎉',
+      body: `'${t}' 요청의 연결이 완료 처리됐어요.`,
+      link,
+      refId: args.matchId,
+    })
+    // 헬퍼: 기여 적립 통보 (적립 점수가 있을 때만 점수 표기)
+    await createNotification(ctx, match.helperId, {
+      type: 'match.completed',
+      title: '도움 주신 연결이 완료됐어요',
+      body:
+        awardedHelper > 0
+          ? `'${t}' 연결 완료로 기여 +${awardedHelper}점이 적립됐어요.`
+          : `'${t}' 연결이 완료 처리됐어요.`,
+      link,
+      refId: args.matchId,
+    })
     return null
   },
 })
