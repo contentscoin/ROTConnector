@@ -27,19 +27,24 @@ npx convex deploy            # 함수 + 스키마를 prod에 배포
 
 ## 3. 최초 운영진 부트스트랩 (중요)
 
-`members.setAdmin`은 기존 운영진을 요구하므로, 시드 없는 prod에선 첫 운영진을 만들 수 없다.
-순서:
+회원 등록은 운영진만 가능하므로 **빈 prod에선 로그인할 계정 자체가 없다.**
+빈 DB 기준 1회 실행(upsert — 없으면 생성, 있으면 승격):
 
-1. 운영자가 될 사람이 앱에서 **본인 phone으로 계정 클레임**(프로필 작성).
-2. 1회 실행으로 승격(active 운영진):
-   ```bash
-   npx convex run migrations:promoteAdmin '{"phone":"01012345678"}'
-   ```
-   - `internalMutation`이라 클라이언트에서 호출 불가(안전).
-   - 이후 추가 운영진은 운영진 콘솔(/admin → 회원)에서 토글로 지정.
+```bash
+npx convex run migrations:bootstrapAdmin '{"name":"홍길동","phone":"01012345678"}' --prod
+```
+
+- `internalMutation`이라 클라이언트에서 호출 불가(안전).
+- 이미 회원이 있는 경우엔 `migrations:promoteAdmin '{"phone":"..."}'`도 사용 가능.
+- 이후 추가 운영진은 운영진 콘솔(/admin → 회원)에서 토글로 지정.
+
+**데모 데이터 초기화**: prod에 시드/데모 데이터가 있으면 오픈 전 삭제:
+```bash
+npx convex run migrations:wipeDemoData '{"confirm":"WIPE"}' --prod
+```
+(모든 앱 테이블 전 행 삭제. 2026-07-12 1회 실행됨 — 구 시드 14명 제거.)
 
 > **prod에서 `seed:run` 실행 금지** — 데모 회원 13명·샘플 데이터를 만든다. 시드는 dev 전용.
-> 데모 admin(`김도현 / 01011110000`)은 시드 데이터일 뿐, prod 운영진이 아니다.
 
 ## 4. 프론트엔드 배포 (Vercel)
 
