@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Polish and production readiness: UI refinements, accessibility improvements, PWA configuration, comprehensive error boundaries, and final build verification",
+  "status": "completed",
+  "steps": [
+    "1. Add PWA manifest and service worker registration: Create public/manifest.json with app name '알비연 링크', theme color matching navy-800, icons references. Update index.html with manifest link and theme-color meta. Add a minimal service worker registration in src/main.tsx for offline caching of the app shell.",
+    "2. Improve ErrorBoundary: Enhance src/components/ErrorBoundary.tsx with a user-friendly error UI (not just a blank screen). Show the error message, a 'Retry' button that reloads the page, and a 'Go Home' link. Wrap the top-level App with it.",
+    "3. Add accessibility improvements across pages: Ensure all interactive elements have aria-labels. Add proper heading hierarchy (h1 only once per page). Add skip-to-content link in Layout. Ensure color contrast meets WCAG AA on key text elements.",
+    "4. Add loading states for mutation actions: Create a useFormSubmit hook or pattern in src/lib/hooks.ts that standardizes loading/error/success state for forms. Apply it in at least NewRequestPage and the announcement creation form.",
+    "5. Add proper meta tags for social sharing: Update index.html with og:title, og:description, og:image meta tags. These are static for the SPA but provide context when the URL is shared on KakaoTalk or other platforms.",
+    "6. Add a splash/loading screen: Create a brief app-shell loading state in index.html (before React mounts) showing the ROT logo and app name, preventing flash of unstyled content on mobile.",
+    "7. Final build verification and cleanup: Remove any unused imports, fix any TypeScript warnings, ensure all new files are properly imported. Run 'pnpm build' and fix any issues."
+  ],
+  "acceptance_criteria": [
+    "pnpm build succeeds with no TypeScript errors",
+    "public/manifest.json exists with correct app metadata",
+    "ErrorBoundary shows user-friendly error UI with retry/home actions",
+    "index.html has og: meta tags and manifest link",
+    "A loading/splash screen appears in index.html before React",
+    "No TypeScript errors or unused import warnings in build output"
+  ],
+  "verification": [
+    "Run 'cd /projects/sandbox/ROTConnector && pnpm build' and confirm exit code 0 with clean output"
+  ],
+  "blocked_reason": null,
+  "findings": "All items implemented successfully. Build passes cleanly. The project already had a manifest.webmanifest and icons, so updated values to match requirements (theme_color #1e3a5f, background_color #f8fafc, short_name '알비연'). ErrorBoundary already existed but was enhanced with retry/home buttons and error message display. Service worker registered in production mode only. useFormSubmit hook created and applied to NewRequestPage and AnnouncementsPage CreateForm."
+}
