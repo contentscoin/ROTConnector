@@ -16,8 +16,8 @@ import {
   StatCard,
   TagSuggest,
   Textarea,
-  useToast,
 } from '../components/ui'
+import { useToast } from '../lib/toast'
 import { requestStatusLabel, requestStatusTone } from '../lib/format'
 import { addTag, errorMessage, splitTags } from '../lib/utils'
 import { profileCompleteness } from '../lib/profile'

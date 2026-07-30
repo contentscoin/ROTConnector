@@ -24,6 +24,9 @@ dist-ssr
 *.sw?
 .vercel
 
+# 에이전트 작업 상태 (제품 코드 아님)
+.agents/
+
 # Android signing
 keystore.properties
 *.jks

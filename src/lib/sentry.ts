@@ -11,11 +11,10 @@ export function initSentry() {
   Sentry.init({
     dsn,
     environment: import.meta.env.MODE,
+    // 세션 리플레이(replayIntegration)는 번들이 커져 미도입 —
+    // 성능 트레이싱만 사용한다.
     integrations: [Sentry.browserTracingIntegration()],
     tracesSampleRate: 0.2,
-    // 프로덕션에서만 전체 세션 리플레이, 에러 시 100%
-    replaysSessionSampleRate: 0,
-    replaysOnErrorSampleRate: 1.0,
   })
 }
 

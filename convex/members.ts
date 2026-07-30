@@ -1,5 +1,6 @@
 import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
+import type { QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { memberFromToken, requireMember, requireAdmin } from './auth'
 import { normalizeCohort, normalizeTags, termsOverlap } from './util'
@@ -66,7 +67,17 @@ function assertSafeLinks(links: { label: string; url: string }[]) {
   }
 }
 
-// 회원 디렉토리 (검색·필터). 파일럿 규모(≤300)에 맞춰 메모리 필터.
+// 활성 회원만 인덱스로 조회 (전체 스캔 방지). 디렉토리·추천·통계의 공통 진입점.
+async function activeMembers(ctx: QueryCtx) {
+  return await ctx.db
+    .query('members')
+    .withIndex('by_status', (q) => q.eq('status', 'active'))
+    .collect()
+}
+
+// 회원 디렉토리 (검색·필터).
+// 지역/기수/학교는 status 선행 복합 인덱스로 서버에서 좁히고,
+// 배열 필드(업종·도움분야)와 자유 텍스트만 좁혀진 결과에서 처리한다.
 // phone 등 비공개 필드는 toPublicMember projection으로 제거해 반환.
 export const list = query({
   args: {
@@ -85,17 +96,43 @@ export const list = query({
   ) => {
     // pending(미승인) 회원 노출은 운영진 전용 — 비인증 우회 차단
     if (includePending) await requireAdmin(ctx, token)
-    let members = await ctx.db.query('members').collect()
-    if (!includePending) {
-      members = members.filter((m) => m.status === 'active')
+    // 정확 일치 필터 하나를 인덱스 prefix로 사용 (region > cohort > university 순).
+    // 저장 시 normalizeCohort로 정규화된 값 기준이라 facets 값과 정합.
+    let members: Doc<'members'>[]
+    if (includePending) {
+      members = await ctx.db.query('members').collect()
+    } else if (region) {
+      members = await ctx.db
+        .query('members')
+        .withIndex('by_status_region', (q) =>
+          q.eq('status', 'active').eq('region', region),
+        )
+        .collect()
+    } else if (cohort) {
+      members = await ctx.db
+        .query('members')
+        .withIndex('by_status_cohort', (q) =>
+          q.eq('status', 'active').eq('cohort', cohort),
+        )
+        .collect()
+    } else if (university) {
+      members = await ctx.db
+        .query('members')
+        .withIndex('by_status_university', (q) =>
+          q.eq('status', 'active').eq('university', university),
+        )
+        .collect()
+    } else {
+      members = await activeMembers(ctx)
     }
     if (industry) {
       members = members.filter((m) => m.industry.includes(industry))
     }
+    // 아래 정확 일치 필터는 위에서 인덱스 prefix로 이미 적용된 경우 no-op이고,
+    // 그 외 조합(예: region+cohort 동시 지정, includePending)에서 나머지를 걸러낸다.
     if (region) {
       members = members.filter((m) => m.region === region)
     }
-    // 기수·학교는 정확 일치 필터 (저장 시 normalizeCohort로 정규화된 값 기준)
     if (cohort) {
       members = members.filter((m) => m.cohort === cohort)
     }
@@ -147,14 +184,13 @@ export const get = query({
 export const facets = query({
   args: {},
   handler: async (ctx) => {
-    const members = await ctx.db.query('members').collect()
+    const members = await activeMembers(ctx)
     const industries = new Set<string>()
     const regions = new Set<string>()
     const cohorts = new Set<string>()
     const universities = new Set<string>()
     const helpCount = new Map<string, number>()
     for (const m of members) {
-      if (m.status !== 'active') continue
       m.industry.forEach((i) => industries.add(i))
       if (m.region) regions.add(m.region)
       // 필터 칩은 정규화된 숫자 기수만 노출 (자유 표기 주입 방지)
@@ -181,7 +217,7 @@ export const facets = query({
       }),
       universities: [...universities].sort((a, b) => a.localeCompare(b, 'ko')),
       helpOffers,
-      total: members.filter((m) => m.status === 'active').length,
+      total: members.length,
     }
   },
 })
@@ -190,13 +226,12 @@ export const facets = query({
 export const tagPool = query({
   args: {},
   handler: async (ctx) => {
-    const members = await ctx.db.query('members').collect()
+    const members = await activeMembers(ctx)
     const industries = new Map<string, number>()
     const helps = new Map<string, number>()
     const bump = (mp: Map<string, number>, k: string) =>
       mp.set(k, (mp.get(k) ?? 0) + 1)
     for (const m of members) {
-      if (m.status !== 'active') continue
       m.industry.forEach((i) => bump(industries, i))
       m.helpOffer.forEach((h) => bump(helps, h))
       m.helpNeed.forEach((h) => bump(helps, h))
@@ -230,9 +265,9 @@ export const recommendForRequest = query({
       ...matches.map((m) => m.helperId as string),
     ])
     const reqTerms = [req.category, ...req.tags]
-    const members = await ctx.db.query('members').collect()
+    const members = await activeMembers(ctx)
     return members
-      .filter((m) => m.status === 'active' && !excluded.has(m._id as string))
+      .filter((m) => !excluded.has(m._id as string))
       .map((m) => {
         const overlap = termsOverlap(reqTerms, [...m.helpOffer, ...m.industry])
         const regionMatch = !!req.region && m.region === req.region
@@ -261,9 +296,9 @@ export const recommendForMember = query({
     if (myTerms.length === 0 && !me.region && !me.cohort && !me.university) {
       return []
     }
-    const members = await ctx.db.query('members').collect()
+    const members = await activeMembers(ctx)
     return members
-      .filter((m) => m.status === 'active' && m._id !== me._id)
+      .filter((m) => m._id !== me._id)
       .map((m) => {
         const overlap = termsOverlap(myTerms, [...m.helpOffer, ...m.industry])
         const regionMatch = !!me.region && m.region === me.region
@@ -355,10 +390,8 @@ export const peerCounts = query({
   handler: async (ctx, { token }) => {
     const me = await memberFromToken(ctx, token)
     if (!me) return null
-    const members = await ctx.db.query('members').collect()
-    const peers = members.filter(
-      (m) => m.status === 'active' && m._id !== me._id,
-    )
+    const members = await activeMembers(ctx)
+    const peers = members.filter((m) => m._id !== me._id)
     return {
       cohort: me.cohort,
       cohortCount: me.cohort

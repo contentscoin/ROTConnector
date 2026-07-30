@@ -36,9 +36,16 @@ export const list = query({
         .withIndex('by_status', (q) => q.eq('status', status))
         .order('desc')
         .collect()
+    } else if (category) {
+      requests = await ctx.db
+        .query('requests')
+        .withIndex('by_category', (q) => q.eq('category', category))
+        .order('desc')
+        .collect()
     } else {
       requests = await ctx.db.query('requests').order('desc').collect()
     }
+    // status 인덱스를 쓴 경우 category는 여기서 걸러진다 (인덱스 prefix는 하나만 사용).
     if (category) {
       requests = requests.filter((r) => r.category === category)
     }

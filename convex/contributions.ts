@@ -18,9 +18,12 @@ export const byMember = query({
 export const leaderboard = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, { limit }) => {
-    const members = await ctx.db.query('members').collect()
+    // by_status 인덱스로 활성 회원만 조회 (전체 스캔 방지)
+    const members = await ctx.db
+      .query('members')
+      .withIndex('by_status', (q) => q.eq('status', 'active'))
+      .collect()
     return members
-      .filter((m) => m.status === 'active')
       .sort((a, b) => b.contributionScore - a.contributionScore)
       .slice(0, limit ?? 10)
       .map((m) => ({

@@ -64,7 +64,10 @@
 - **sessions** — 파일럿 경량 세션 (phone 클레임)
 
 ### 인덱스
-- members: by_phone, by_industry, by_region, by_status
+- members: by_phone, by_status, by_status_region, by_status_cohort, by_status_university
+  - 디렉토리 필터는 항상 `status='active'` 위에서 걸리므로 status 선행 복합 인덱스로 둔다.
+  - 업종(`industry`)·도움분야(`helpOffer`)는 **배열 필드**라 Convex 인덱스로 원소 단위
+    조회가 불가 → status 인덱스로 좁힌 뒤 메모리 필터(파일럿 ≤300명).
 - requests: by_status, by_author, by_category
 - matches: by_request, by_helper
 - contributions: by_member
