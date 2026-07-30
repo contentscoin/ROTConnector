@@ -12,6 +12,7 @@
   "dependencies": {
     "@capacitor/android": "^7.6.5",
     "@capacitor/ios": "^7.6.5",
+    "@sentry/react": "^10.69.0",
     "clsx": "^2.1.1",
     "convex": "^1.39.1",
     "firebase": "^12.15.0",

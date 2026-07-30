@@ -330,12 +330,31 @@ export function HomePage() {
 
       {/* Footer */}
       <footer className="border-t border-navy-100 pt-4 pb-2 text-center">
-        <Link
-          to="/about"
-          className="text-sm font-semibold text-navy-500 hover:text-navy-700"
-        >
-          알비연 링크 소개
-        </Link>
+        <div className="flex items-center justify-center gap-3">
+          <Link
+            to="/about"
+            className="text-sm font-semibold text-navy-500 hover:text-navy-700"
+          >
+            소개
+          </Link>
+          <span className="text-navy-200">·</span>
+          <Link
+            to="/terms"
+            className="text-sm font-semibold text-navy-500 hover:text-navy-700"
+          >
+            이용약관
+          </Link>
+          <span className="text-navy-200">·</span>
+          <Link
+            to="/privacy"
+            className="text-sm font-semibold text-navy-500 hover:text-navy-700"
+          >
+            개인정보처리방침
+          </Link>
+        </div>
+        <p className="mt-2 text-xs text-navy-400">
+          v1.0.0 · © 2025 ROTC 비즈니스연합회
+        </p>
       </footer>
     </div>
   )

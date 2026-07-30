@@ -17,6 +17,8 @@ import { AdminDashboardPage } from './pages/AdminDashboardPage'
 import { EventsPage } from './pages/EventsPage'
 import { EventDetailPage } from './pages/EventDetailPage'
 import { AboutPage } from './pages/AboutPage'
+import { TermsPage } from './pages/TermsPage'
+import { PrivacyPage } from './pages/PrivacyPage'
 import { AnnouncementsPage } from './pages/AnnouncementsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 
@@ -89,6 +91,8 @@ export default function App() {
         <Route path="/events/:id" element={<EventDetailPage />} />
         <Route path="/community" element={<AnnouncementsPage />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Layout>

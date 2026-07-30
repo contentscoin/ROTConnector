@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react'
+import { captureError } from '../lib/sentry'
 
 type Props = { children: ReactNode }
 type State = { hasError: boolean; errorMessage: string | null }
@@ -17,8 +18,8 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Production에서는 에러 리포팅 서비스로 전송
     console.error('[ErrorBoundary]', error, info.componentStack)
+    captureError(error, { componentStack: info.componentStack ?? undefined })
   }
 
   handleRetry = () => {
