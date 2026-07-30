@@ -82,7 +82,11 @@ npx convex run migrations:wipeDemoData '{"confirm":"WIPE"}' --prod
 
 ## 5. 배포 후 스모크 테스트
 
-- [ ] `/manifest.webmanifest`, `/apple-touch-icon.png`, `/icons/*` 가 200(HTML 아님)으로 로드 — PWA 설치 가능
+- [ ] `/manifest.webmanifest`, `/apple-touch-icon.png`, `/icons/*`, `/robots.txt`, `/sitemap.xml` 이
+      200(HTML 아님)으로 로드 — PWA 설치 + 색인 가능
+- [ ] 브라우저 콘솔에 **CSP 위반 없음**(`vercel.json`의 Content-Security-Policy).
+      Convex WSS·FCM(googleapis/gstatic)·Sentry는 허용 목록에 있음 —
+      외부 스크립트/이미지 호스트를 새로 추가하면 CSP도 함께 갱신해야 한다.
 - [ ] 딥링크 새로고침 동작: `/members/<id>`, `/events/<id>`, `/requests/<id>` 직접 진입 시 404 아님
 - [ ] phone 클레임 → 로그인 → 프로필 작성 → 운영진 승인(pending→active) 흐름
 - [ ] 도움요청 등록 → 운영진 매칭(propose)·완료(complete) → 작성자/헬퍼 **알림 수신**(헤더 벨)
@@ -97,7 +101,27 @@ pnpm build && npx cap sync
 npx cap open ios     # / android
 ```
 
-## 7. 푸시 알림 (FCM) 설정
+## 7. 에러 리포팅 (Sentry) 설정 — 선택
+
+`src/lib/sentry.ts`는 `VITE_SENTRY_DSN`이 있을 때만 초기화된다(미설정 시 완전 no-op이라
+앱은 정상 동작하고 네트워크 요청도 발생하지 않음).
+
+1. Sentry에서 프로젝트 생성(플랫폼: React) → **DSN** 복사.
+2. `.env.production`의 주석 처리된 줄을 해제해 채운다(DSN은 공개값이라 커밋 가능):
+   ```
+   VITE_SENTRY_DSN=https://<publicKey>@o0.ingest.sentry.io/<projectId>
+   ```
+   Vercel 대시보드 환경변수로 넣어도 동일하게 동작한다(빌드 타임에 주입됨).
+3. 재배포. 수집 항목: 미처리 예외 + `captureError()` 호출 + 성능 트레이스(샘플링 20%).
+4. `vercel.json`의 CSP `connect-src`에 `https://*.sentry.io`가 이미 허용돼 있다.
+   자체 호스팅/커스텀 도메인 DSN을 쓰면 해당 호스트를 CSP에 추가해야 한다.
+
+> 소스맵은 `hidden` 모드로 생성돼 `dist/assets/*.map`에 남는다(브라우저에 노출 안 됨).
+> Sentry에 업로드하려면 릴리스마다 `sentry-cli sourcemaps upload dist/assets` 사용.
+
+---
+
+## 8. 푸시 알림 (FCM) 설정
 
 코드 연동은 완료돼 있고(인앱 알림 생성 시 자동 푸시 스케줄), **자격증명만 채우면 작동**한다.
 미설정 시 푸시는 no-op이라 앱은 정상 동작한다.

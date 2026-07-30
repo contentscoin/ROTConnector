@@ -57,7 +57,13 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index('by_phone', ['phone'])
-    .index('by_status', ['status']),
+    .index('by_status', ['status'])
+    // 디렉토리 필터는 항상 status='active' 위에서 걸리므로 status 선행 복합 인덱스.
+    // industry/helpOffer는 배열 필드라 Convex 인덱스로 원소 단위 조회가 불가 —
+    // status 인덱스로 범위를 좁힌 뒤 메모리에서 걸러낸다(파일럿 ≤300명).
+    .index('by_status_region', ['status', 'region'])
+    .index('by_status_cohort', ['status', 'cohort'])
+    .index('by_status_university', ['status', 'university']),
 
   requests: defineTable({
     authorId: v.id('members'),
@@ -71,7 +77,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index('by_status', ['status'])
-    .index('by_author', ['authorId']),
+    .index('by_author', ['authorId'])
+    .index('by_category', ['category']),
 
   matches: defineTable({
     requestId: v.id('requests'),

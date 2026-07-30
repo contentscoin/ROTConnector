@@ -22,8 +22,8 @@ import {
   LoadingScreen,
   SectionHeader,
   ShareButton,
-  useToast,
 } from '../components/ui'
+import { useToast } from '../lib/toast'
 import { formatCohort, formatDate } from '../lib/format'
 import { errorMessage } from '../lib/utils'
 

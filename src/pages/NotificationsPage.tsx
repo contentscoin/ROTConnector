@@ -23,7 +23,7 @@ import {
   PageHeader,
   SkeletonList,
 } from '../components/ui'
-import { timeAgo } from '../lib/format'
+import { dateGroupLabel, timeAgo } from '../lib/format'
 import {
   enableWebPush,
   pushConfigured,
@@ -94,19 +94,8 @@ export function NotificationsPage() {
   const grouped = useMemo(() => {
     if (!rows) return null
     const groups: { label: string; items: NotificationRow[] }[] = []
-    const now = Date.now()
-    const today = new Date(now).toDateString()
-    const yesterday = new Date(now - 86400000).toDateString()
-
     for (const n of rows) {
-      const d = new Date(n.createdAt).toDateString()
-      let label: string
-      if (d === today) label = '오늘'
-      else if (d === yesterday) label = '어제'
-      else {
-        const date = new Date(n.createdAt)
-        label = `${date.getMonth() + 1}월 ${date.getDate()}일`
-      }
+      const label = dateGroupLabel(n.createdAt)
       const last = groups[groups.length - 1]
       if (last && last.label === label) {
         last.items.push(n)

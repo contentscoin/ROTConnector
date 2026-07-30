@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState } from 'react'
+import { useCallback, useState } from 'react'
 import type {
   ButtonHTMLAttributes,
   HTMLAttributes,
@@ -9,6 +9,8 @@ import type {
 } from 'react'
 import { Loader2, Share2, Check, ChevronDown, CheckCircle2, AlertCircle, Info } from 'lucide-react'
 import { cn } from '../lib/utils'
+import { ToastContext } from '../lib/toast'
+import type { ToastType } from '../lib/toast'
 
 /* ---------- Button ---------- */
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'gold'
@@ -577,8 +579,6 @@ export function SegmentedControl<T extends string>({
 }
 
 /* ---------- Toast (lightweight notification) ---------- */
-type ToastType = 'success' | 'error' | 'info'
-
 interface ToastItem {
   id: number
   message: string
@@ -595,18 +595,6 @@ const toastStyles: Record<ToastType, string> = {
   success: 'border-emerald-200 bg-white',
   error: 'border-red-200 bg-white',
   info: 'border-navy-200 bg-white',
-}
-
-type ToastContextValue = {
-  toast: (message: string, type?: ToastType) => void
-}
-
-const ToastContext = createContext<ToastContextValue>({
-  toast: () => {},
-})
-
-export function useToast() {
-  return useContext(ToastContext)
 }
 
 let toastId = 0

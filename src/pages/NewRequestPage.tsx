@@ -13,8 +13,8 @@ import {
   Select,
   TagSuggest,
   Textarea,
-  useToast,
 } from '../components/ui'
+import { useToast } from '../lib/toast'
 import { addTag, splitTags } from '../lib/utils'
 import { useFormSubmit } from '../lib/hooks'
 

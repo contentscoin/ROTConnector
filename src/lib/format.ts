@@ -89,6 +89,16 @@ export function timeAgo(ts: number): string {
   })
 }
 
+// 알림 목록 날짜 그룹 라벨 ('오늘' / '어제' / 'M월 D일')
+export function dateGroupLabel(ts: number): string {
+  const now = Date.now()
+  const day = new Date(ts).toDateString()
+  if (day === new Date(now).toDateString()) return '오늘'
+  if (day === new Date(now - 86400000).toDateString()) return '어제'
+  const d = new Date(ts)
+  return `${d.getMonth() + 1}월 ${d.getDate()}일`
+}
+
 export function formatDate(dateStr?: string): string {
   if (!dateStr) return ''
   const d = new Date(dateStr)
