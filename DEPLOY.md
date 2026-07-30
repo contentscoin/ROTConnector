@@ -40,12 +40,39 @@ GitHub Actions 워크플로우가 자동 빌드와 배포를 처리합니다.
 npx convex deploy            # 함수 + 스키마를 prod에 배포
 ```
 
-- 신규 테이블(`notifications`, `auditLogs`, `eventRsvps`)은 **추가 전용**이라 배포 시 자동 생성됨.
-  별도 마이그레이션·백필 불필요(초기 빈 상태).
+- 신규 테이블(`notifications`, `auditLogs`, `eventRsvps`, `announcements`,
+  `counters`, `facetCounts`)은 **추가 전용**이라 배포 시 자동 생성됨.
 - 레거시 cohort 표기 정규화가 필요한 기존 데이터가 있으면(1회):
   ```bash
   npx convex run migrations:normalizeCohorts
   ```
+
+### 2-1. 1000명 기준 확장 백필 (기존 데이터가 있을 때 **필수**)
+
+회원 1000명 기준으로 데이터 접근을 바꿨다(자세한 설계는 `PLAN.md` §4).
+검색은 `members.searchText` / `requests.searchText` **검색 인덱스**를 쓰고,
+대시보드·통계·필터 칩 수치는 `counters` / `facetCounts` **롤업**에서 읽는다.
+둘 다 쓰기 경로에서 유지되므로, **배포 이전에 들어간 기존 행은 1회 백필해야 한다.**
+(백필 전에는 검색 결과가 비고 대시보드 수치가 0으로 보인다.)
+
+빈 prod(신규 배포)라면 건너뛴다. 기존 데이터가 있으면 **순서대로** 1회 실행:
+
+```bash
+# 1) 검색 텍스트 + 프로필 완성률 캐시 백필 (members → requests 순서로 자동 진행)
+npx convex run migrations:backfillSearchText --prod
+
+# 2) counters / facetCounts 전량 재계산 (기존 롤업을 비우고 다시 집계)
+npx convex run migrations:rebuildRollups '{"confirm":"REBUILD"}' --prod
+```
+
+- 둘 다 `internalMutation`이라 클라이언트에서 호출 불가.
+- 200건씩 처리하고 남으면 스케줄러로 자기 자신을 이어 호출한다(한 트랜잭션의
+  읽기·쓰기 수를 고정). 실행 직후 바로 끝나지 않고 백그라운드로 완주하므로,
+  Convex 대시보드의 Logs에서 마지막 단계(`phase: "notifications", done: true`)를 확인한다.
+- **`rebuildRollups`는 언제든 다시 돌려도 안전하다**(전량 재계산이라 멱등).
+  대시보드 수치가 실제와 어긋난 것 같으면 이걸 다시 실행하면 된다.
+- `rebuildRollups`는 `backfillSearchText`가 하는 일(검색 텍스트·완성률)도 포함하므로,
+  둘 중 하나만 돌릴 상황이면 `rebuildRollups`를 쓴다.
 
 ## 3. 최초 운영진 부트스트랩 (중요)
 
@@ -93,6 +120,16 @@ npx convex run migrations:wipeDemoData '{"confirm":"WIPE"}' --prod
 - [ ] 교류 신청 → 수락 시에만 상호 연락처 노출, 알림 수신
 - [ ] 행사 등록 → 전체 회원 알림 + 참석/관심 RSVP + 상세 참석자 명단
 - [ ] 정지(suspended) 처리 시 해당 계정 즉시 로그아웃·디렉토리/피드에서 제외
+- [ ] **1000명 기준 확장 확인**(§2-1 백필 후):
+  - [ ] `/members` 검색·필터 후 목록 하단 **"더 보기"** 로 다음 페이지가 이어짐
+        (도움요청·커뮤니티·알림·행사·교류·운영진 회원표도 동일)
+  - [ ] 필터 칩(기수·학교·업종·지역·도움분야)에 값이 채워짐 → `facetCounts` 롤업 정상
+  - [ ] `/admin` 대시보드·통계 수치가 실제와 일치 → `counters` 롤업 정상.
+        어긋나면 `migrations:rebuildRollups` 재실행
+  - [ ] 회원 등록·상태 변경·요청 등록·교류 수락 직후 위 수치가 즉시 반영됨(쓰기 시 증감)
+  - [ ] 운영진 CSV 내보내기가 전체 회원을 담아 내려옴(커서로 이어 받음)
+  - [ ] 회원 검색어에 전화번호를 넣으면 **완전일치만** 조회됨(부분 일치 미지원 —
+        공개 검색 인덱스에 phone을 넣지 않는 정책)
 
 ## 6. 모바일 릴리스 (선택)
 
@@ -139,9 +176,12 @@ npx cap open ios     # / android
 - 인앱 알림 8종 전부 푸시로도 전달된다(교류·매칭·도움요청·행사·가입승인).
 - 무효/만료 토큰은 발송 시 자동 정리(404/400).
 - 행사 등록 알림 팬아웃은 스케줄러 기반 페이지 처리(100명/배치, `events.fanoutCreated`)라
-  회원 수와 무관하게 등록이 즉시 완료된다. 잔여 최적화(선택): 푸시 발송 액션이
-  알림 1건당 1개 생성되고 각자 OAuth 토큰을 발급 — 수천 명 규모부터 발송 액션
-  배치(토큰 재사용) 검토.
+  회원 수와 무관하게 등록이 즉시 완료된다.
+- **푸시 발송은 배치로 묶여 있다** — 팬아웃 페이지 1개당 `push.sendBatch` 액션 1개만
+  예약되고 OAuth 액세스 토큰도 배치당 1회만 발급한다. 회원 1000명 기준으로
+  액션 10개 · 토큰 발급 10회다(이전 구현은 수신자마다 액션 1개 + 토큰 1회라
+  액션 1000개 · 토큰 1000회였다).
+  1:1 알림(교류·매칭 등)은 그대로 `push.sendToUser` 단건 경로를 쓴다.
 
 ### 네이티브(iOS/Android) 푸시 — 후속
 

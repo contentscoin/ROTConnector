@@ -190,8 +190,19 @@ export function EventDetailPage() {
         )}
       </Card>
 
-      <AttendeeGroup title="참석" icon={Check} people={event.going} />
-      <AttendeeGroup title="관심" icon={Star} people={event.interested} />
+      {/* 명단은 상태별 상한까지만 (총 인원은 위 카운터 기준) */}
+      <AttendeeGroup
+        title="참석"
+        icon={Check}
+        people={event.going}
+        total={event.goingCount}
+      />
+      <AttendeeGroup
+        title="관심"
+        icon={Star}
+        people={event.interested}
+        total={event.interestedCount}
+      />
     </div>
   )
 }
@@ -201,16 +212,20 @@ function AttendeeGroup({
   title,
   icon: Icon,
   people,
+  total,
 }: {
   title: string
   icon: LucideIcon
   people: Attendee[]
+  total: number
 }) {
   if (people.length === 0) return null
+  // 1000명 규모 행사에서도 읽는 문서 수를 고정하려고 명단은 서버에서 잘려 온다.
+  const hidden = Math.max(0, total - people.length)
   return (
     <section>
       <SectionHeader
-        title={`${title} ${people.length}`}
+        title={`${title} ${total}`}
         icon={<Icon className="size-4" />}
       />
       <div className="space-y-2">
@@ -234,6 +249,11 @@ function AttendeeGroup({
             </Link>
           )
         })}
+        {hidden > 0 && (
+          <p className="py-1 text-center text-xs text-navy-400">
+            외 {hidden}명
+          </p>
+        )}
       </div>
     </section>
   )

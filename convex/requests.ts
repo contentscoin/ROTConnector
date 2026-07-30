@@ -1,10 +1,15 @@
 import { v } from 'convex/values'
+import { paginationOptsValidator } from 'convex/server'
 import { mutation, query } from './_generated/server'
-import type { QueryCtx } from './_generated/server'
-import type { Doc } from './_generated/dataModel'
+import type { MutationCtx, QueryCtx } from './_generated/server'
+import type { Doc, Id } from './_generated/dataModel'
 import { requestStatus } from './schema'
 import { memberFromToken, requireMember } from './auth'
-import { normalizeTags } from './util'
+import { buildRequestSearchText, normalizeTags } from './util'
+import { applyRequestDelta, topFacets } from './rollup'
+
+// 태그 자동완성으로 노출할 빈도 상위 개수
+const TAG_SUGGESTIONS = 15
 
 // 작성자 요약을 붙여서 반환
 async function withAuthor(ctx: QueryCtx, req: Doc<'requests'>) {
@@ -22,59 +27,86 @@ async function withAuthor(ctx: QueryCtx, req: Doc<'requests'>) {
   }
 }
 
+// 요청 문서 변경 후 검색 텍스트 캐시를 최종 문서 기준으로 재계산.
+async function refreshRequestSearch(
+  ctx: MutationCtx,
+  requestId: Id<'requests'>,
+): Promise<void> {
+  const r = await ctx.db.get(requestId)
+  if (!r) return
+  await ctx.db.patch(requestId, { searchText: buildRequestSearchText(r) })
+}
+
+/**
+ * 도움요청 피드 — 커서 페이지네이션.
+ *
+ * 1000명 기준 설계: 한 번에 읽는 문서 수를 요청 페이지 크기로 고정한다.
+ *  - q(자유 텍스트): requests.searchText 전문 인덱스 + filterFields(status/category)
+ *  - status/category: 각각 by_status / by_category 인덱스
+ * 인덱스는 prefix 하나만 쓰므로 남은 조건은 페이지 안에서 걸러낸다.
+ * 공개 피드에는 활성 회원의 요청만 노출하므로 작성자 상태도 페이지 내에서 확정한다
+ * (페이지가 부분적으로 비어도 loadMore로 이어진다).
+ */
 export const list = query({
   args: {
+    paginationOpts: paginationOptsValidator,
     status: v.optional(requestStatus),
     category: v.optional(v.string()),
     q: v.optional(v.string()),
   },
-  handler: async (ctx, { status, category, q }) => {
-    let requests: Doc<'requests'>[]
-    if (status) {
-      requests = await ctx.db
+  handler: async (ctx, { paginationOpts, status, category, q }) => {
+    const needle = q?.trim()
+    let result
+    if (needle) {
+      result = await ctx.db
         .query('requests')
-        .withIndex('by_status', (q) => q.eq('status', status))
+        .withSearchIndex('search_text', (s) => {
+          let b = s.search('searchText', needle)
+          if (status) b = b.eq('status', status)
+          if (category) b = b.eq('category', category)
+          return b
+        })
+        .paginate(paginationOpts)
+    } else if (status) {
+      result = await ctx.db
+        .query('requests')
+        .withIndex('by_status', (qq) => qq.eq('status', status))
         .order('desc')
-        .collect()
+        .paginate(paginationOpts)
     } else if (category) {
-      requests = await ctx.db
+      result = await ctx.db
         .query('requests')
-        .withIndex('by_category', (q) => q.eq('category', category))
+        .withIndex('by_category', (qq) => qq.eq('category', category))
         .order('desc')
-        .collect()
+        .paginate(paginationOpts)
     } else {
-      requests = await ctx.db.query('requests').order('desc').collect()
+      result = await ctx.db.query('requests').order('desc').paginate(paginationOpts)
     }
-    // status 인덱스를 쓴 경우 category는 여기서 걸러진다 (인덱스 prefix는 하나만 사용).
-    if (category) {
-      requests = requests.filter((r) => r.category === category)
-    }
-    if (q && q.trim()) {
-      const needle = q.trim().toLowerCase()
-      requests = requests.filter((r) =>
-        [r.title, r.body, r.category, ...r.tags]
-          .join(' ')
-          .toLowerCase()
-          .includes(needle),
-      )
-    }
+
+    let page = result.page
+    if (status && needle) page = page.filter((r) => r.status === status)
+    if (category && !needle) page = page.filter((r) => r.category === category)
+
     const withAuthors = await Promise.all(
-      requests.map(async (r) => ({ r, author: await ctx.db.get(r.authorId) })),
+      page.map(async (r) => ({ r, author: await ctx.db.get(r.authorId) })),
     )
-    // 공개 피드에는 활성 회원의 요청만 노출 (정지·미승인 작성자 글은 디렉토리와 동일하게 제외)
-    return withAuthors
-      .filter(({ author }) => author?.status === 'active')
-      .map(({ r, author }) => ({
-        ...r,
-        author: author
-          ? {
-              _id: author._id,
-              name: author.name,
-              company: author.company,
-              cohort: author.cohort,
-            }
-          : null,
-      }))
+    return {
+      ...result,
+      // 정지·미승인 작성자 글은 디렉토리와 동일하게 제외
+      page: withAuthors
+        .filter(({ author }) => author?.status === 'active')
+        .map(({ r, author }) => ({
+          ...r,
+          author: author
+            ? {
+                _id: author._id,
+                name: author.name,
+                company: author.company,
+                cohort: author.cohort,
+              }
+            : null,
+        })),
+    }
   },
 })
 
@@ -87,7 +119,7 @@ export const get = query({
   },
 })
 
-// 내가 올린 요청
+// 내가 올린 요청 (본인 소유 레코드 — 인덱스 조회 비용이 전체 회원 수와 무관)
 export const mine = query({
   args: { token: v.optional(v.string()) },
   handler: async (ctx, { token }) => {
@@ -131,7 +163,7 @@ export const create = mutation({
     const body = args.body.trim()
     if (title.length < 2) throw new Error('제목을 입력해주세요.')
     if (body.length < 5) throw new Error('상세 내용을 5자 이상 입력해주세요.')
-    return await ctx.db.insert('requests', {
+    const doc = {
       authorId: me._id,
       title,
       body,
@@ -139,25 +171,25 @@ export const create = mutation({
       tags: normalizeTags(args.tags ?? []),
       region: args.region,
       urgency: args.urgency ?? 'normal',
-      status: 'open',
+      status: 'open' as const,
       createdAt: Date.now(),
+    }
+    const requestId = await ctx.db.insert('requests', {
+      ...doc,
+      searchText: buildRequestSearchText(doc),
     })
+    const created = await ctx.db.get(requestId)
+    if (created) await applyRequestDelta(ctx, null, created)
+    return requestId
   },
 })
 
-// 요청 태그 자동완성 풀 (빈도 상위)
+// 요청 태그 자동완성 풀 — facetCounts 롤업의 빈도 상위 N개 (요청 수와 무관하게 고정 비용)
 export const tagSuggestions = query({
   args: {},
   handler: async (ctx) => {
-    const requests = await ctx.db.query('requests').collect()
-    const count = new Map<string, number>()
-    for (const r of requests) {
-      for (const t of r.tags) count.set(t, (count.get(t) ?? 0) + 1)
-    }
-    return [...count.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko'))
-      .slice(0, 15)
-      .map(([t]) => t)
+    const tags = await topFacets(ctx, 'requestTag', TAG_SUGGESTIONS)
+    return tags.map((t) => t.key)
   },
 })
 
@@ -197,6 +229,10 @@ export const update = mutation({
       region: args.region,
       urgency: args.urgency ?? 'normal',
     })
+    // 검색 텍스트 + 태그/분류 빈도 롤업을 최종 문서 기준으로 갱신
+    await refreshRequestSearch(ctx, args.requestId)
+    const after = await ctx.db.get(args.requestId)
+    if (after) await applyRequestDelta(ctx, req, after)
     return args.requestId
   },
 })
@@ -226,6 +262,8 @@ export const setStatus = mutation({
     }
     if (status === req.status) return null
     await ctx.db.patch(requestId, { status })
+    const after = await ctx.db.get(requestId)
+    if (after) await applyRequestDelta(ctx, req, after)
     return null
   },
 })

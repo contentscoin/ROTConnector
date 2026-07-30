@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation, useQuery } from 'convex/react'
+import { useMutation, usePaginatedQuery } from 'convex/react'
 import {
   CalendarDays,
   MapPin,
@@ -22,6 +22,7 @@ import {
   EmptyState,
   Field,
   Input,
+  LoadMore,
   PageHeader,
   SegmentedControl,
   Select,
@@ -49,13 +50,26 @@ const emptyForm = {
   body: '',
 }
 
+// 한 번에 받아오는 행사 수 (커서 페이지네이션)
+const PAGE_SIZE = 10
+
 export function EventsPage() {
   const { token, member, isAdmin } = useSession()
   const [filter, setFilter] = useState<Filter>('all')
-  const events = useQuery(api.events.list, {
-    ...(filter === 'all' ? {} : { kind: filter }),
-    ...(token ? { token } : {}),
-  })
+  // 1000명 기준: 행사도 커서 페이지네이션. 참석/관심 수는 서버에서 카운터로 읽으므로
+  // 한 행사에 1000명이 RSVP해도 목록 응답 비용은 그대로다.
+  const {
+    results: events,
+    status: pageStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.events.list,
+    {
+      ...(filter === 'all' ? {} : { kind: filter }),
+      ...(token ? { token } : {}),
+    },
+    { initialNumItems: PAGE_SIZE },
+  )
   const createEvent = useMutation(api.events.create)
   const setEventStatus = useMutation(api.events.setStatus)
   const rsvpEvent = useMutation(api.events.rsvp)
@@ -220,7 +234,7 @@ export function EventsPage() {
         options={tabs.map((t) => ({ value: t.key, label: t.label }))}
       />
 
-      {events === undefined ? (
+      {pageStatus === 'LoadingFirstPage' ? (
         <div className="flex justify-center py-10">
           <Spinner />
         </div>
@@ -358,6 +372,8 @@ export function EventsPage() {
           ))}
         </div>
       )}
+
+      <LoadMore status={pageStatus} onLoadMore={loadMore} pageSize={PAGE_SIZE} />
     </div>
   )
 }

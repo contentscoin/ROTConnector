@@ -40,6 +40,7 @@ import {
   timeAgo,
 } from '../lib/format'
 import { addTag, errorMessage, splitTags } from '../lib/utils'
+import { useDebounce } from '../lib/useDebounce'
 
 const reqStatuses = ['open', 'matching', 'connected', 'closed'] as const
 
@@ -71,7 +72,16 @@ export function RequestDetailPage() {
 
   const req = useQuery(api.requests.get, { id: requestId })
   const matches = useQuery(api.matches.listByRequest, { requestId })
-  const members = useQuery(api.members.list, isAdmin ? {} : 'skip')
+  // 1000명 기준: 연결 대상 <Select>에 전체 회원을 담지 않는다.
+  // 검색어 기반 상위 후보만 서버(members.picker)에서 받아온다.
+  const [helperQuery, setHelperQuery] = useState('')
+  const debouncedHelperQuery = useDebounce(helperQuery, 300)
+  const members = useQuery(
+    api.members.picker,
+    isAdmin && token
+      ? { token, q: debouncedHelperQuery.trim() || undefined }
+      : 'skip',
+  )
   const recommended = useQuery(
     api.members.recommendForRequest,
     isAdmin && token ? { token, requestId } : 'skip',
@@ -557,6 +567,11 @@ export function RequestDetailPage() {
                 </div>
               </div>
             )}
+            <Input
+              placeholder="이름·회사·기수로 회원 검색"
+              value={helperQuery}
+              onChange={(e) => setHelperQuery(e.target.value)}
+            />
             <Select value={helperId} onChange={(e) => setHelperId(e.target.value)}>
               <option value="">연결할 회원 선택</option>
               {members?.map((m) => (

@@ -390,6 +390,43 @@ export function SkeletonList({ count = 5 }: { count?: number }) {
   )
 }
 
+/* ---------- LoadMore ---------- */
+// 커서 페이지네이션 목록의 '더 보기' 버튼.
+// usePaginatedQuery의 status를 그대로 받아 다음 페이지 요청 여부를 판단한다:
+//   CanLoadMore → 버튼, LoadingMore → 스피너, Exhausted → 끝(안내 문구), LoadingFirstPage → 미표시
+export function LoadMore({
+  status,
+  onLoadMore,
+  pageSize = 20,
+  exhaustedLabel,
+}: {
+  status: 'LoadingFirstPage' | 'LoadingMore' | 'CanLoadMore' | 'Exhausted'
+  onLoadMore: (numItems: number) => void
+  pageSize?: number
+  exhaustedLabel?: string
+}) {
+  if (status === 'LoadingFirstPage') return null
+  if (status === 'LoadingMore') {
+    return (
+      <div className="flex justify-center py-4">
+        <Spinner className="size-5" />
+      </div>
+    )
+  }
+  if (status === 'Exhausted') {
+    return exhaustedLabel ? (
+      <p className="py-3 text-center text-xs text-navy-400">{exhaustedLabel}</p>
+    ) : null
+  }
+  return (
+    <div className="flex justify-center py-2">
+      <Button variant="secondary" size="sm" onClick={() => onLoadMore(pageSize)}>
+        더 보기
+      </Button>
+    </div>
+  )
+}
+
 /* ---------- PageHeader ---------- */
 // 페이지 상단 제목 블록 (선택: eyebrow 라벨 · 아이콘 칩 · 우측 액션 · 부제)
 export function PageHeader({

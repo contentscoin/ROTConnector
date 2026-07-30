@@ -1,14 +1,20 @@
 import { v } from 'convex/values'
+import { paginationOptsValidator } from 'convex/server'
 import { mutation, query } from './_generated/server'
-import type { Doc } from './_generated/dataModel'
+import type { QueryCtx } from './_generated/server'
+import type { Doc, Id } from './_generated/dataModel'
 import { memberFromToken, requireMember, enforceRateLimit } from './auth'
 import { createNotification } from './notify'
+import { applyConnectionDelta } from './rollup'
 
 /**
  * 회원 간 1:1 교류 신청 (커피챗·협업 제안 등).
  * phone(연락처)은 accepted 상태의 상대방에게만 공개한다 —
  * 공개 응답 phone 제외 원칙의 명시적 예외 경로.
  * declined 이력은 재신청을 허용한다(statusWith에서 null 취급).
+ *
+ * 1000명 기준 설계: 특정 상대와의 관계 조회는 by_from_to / by_to_from 복합
+ * 인덱스로 좁히고, 받은/보낸 목록은 커서 페이지네이션으로 상한을 고정한다.
  */
 
 // 입력 한도
@@ -17,6 +23,11 @@ const MESSAGE_MAX = 500
 const TOPIC_MAX = 30
 // 거절당한 상대에게 재신청 가능해지기까지의 쿨다운 (괴롭힘 방지)
 const DECLINED_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000
+// '연결' 탭: 수락된 교류는 양방향(by_from_status + by_to_status)을 합쳐야 하므로
+// 단일 커서로 페이지네이션할 수 없다. 방향별 상한을 두고 hasMore로 알린다.
+const CONNECTED_PER_DIRECTION = 100
+// 대기중 받은 신청 뱃지 상한 (그 이상은 '99+'로 충분)
+const PENDING_BADGE_LIMIT = 100
 
 // 상대방 요약 projection (phone 제외 — accepted 시 별도 phone 필드로만 공개)
 function toOtherSummary(m: Doc<'members'>) {
@@ -29,6 +40,26 @@ function toOtherSummary(m: Doc<'members'>) {
     title: m.title,
     region: m.region,
   }
+}
+
+// 나와 상대 사이의 교류 레코드 전부 (양방향). by_from_to / by_to_from 인덱스로
+// 두 사람 쌍만 읽는다 — 내 전체 교류 목록을 훑지 않는다.
+async function pairConnections(
+  ctx: QueryCtx,
+  meId: Id<'members'>,
+  otherId: Id<'members'>,
+): Promise<{ outgoing: Doc<'connections'>[]; incoming: Doc<'connections'>[] }> {
+  const [outgoing, incoming] = await Promise.all([
+    ctx.db
+      .query('connections')
+      .withIndex('by_from_to', (q) => q.eq('fromId', meId).eq('toId', otherId))
+      .collect(),
+    ctx.db
+      .query('connections')
+      .withIndex('by_to_from', (q) => q.eq('toId', meId).eq('fromId', otherId))
+      .collect(),
+  ])
+  return { outgoing, incoming }
 }
 
 // 교류 신청 보내기
@@ -60,16 +91,7 @@ export const request = mutation({
       throw new Error('교류 주제는 30자 이하로 입력해주세요.')
     }
     // 양방향 중복 차단: pending/accepted 존재 시 거부 (declined 이력은 재신청 허용)
-    const mySent = await ctx.db
-      .query('connections')
-      .withIndex('by_from', (q) => q.eq('fromId', me._id))
-      .collect()
-    const myReceived = await ctx.db
-      .query('connections')
-      .withIndex('by_to', (q) => q.eq('toId', me._id))
-      .collect()
-    const outgoing = mySent.filter((c) => c.toId === toId)
-    const incoming = myReceived.filter((c) => c.fromId === toId)
+    const { outgoing, incoming } = await pairConnections(ctx, me._id, toId)
     if ([...outgoing, ...incoming].some((c) => c.status === 'accepted')) {
       throw new Error('이미 연결된 회원입니다.')
     }
@@ -106,6 +128,8 @@ export const request = mutation({
       status: 'pending',
       createdAt: Date.now(),
     })
+    const created = await ctx.db.get(connectionId)
+    if (created) await applyConnectionDelta(ctx, null, created)
     // 수신자에게 교류 신청 알림
     await createNotification(ctx, toId, {
       type: 'connection.request',
@@ -139,6 +163,9 @@ export const respond = mutation({
       status: accept ? 'accepted' : 'declined',
       respondedAt: Date.now(),
     })
+    // 상태 카운터 + 양측 acceptedConnections 캐시 갱신 (운영진 통계·내 활동 통계용)
+    const after = await ctx.db.get(connectionId)
+    if (after) await applyConnectionDelta(ctx, conn, after)
     // 수락 시 신청자에게 알림 (거절은 알리지 않음 — 거절 통보의 부담 회피)
     if (accept) {
       await createNotification(ctx, conn.fromId, {
@@ -167,18 +194,21 @@ export const cancel = mutation({
       throw new Error('대기중인 신청만 취소할 수 있습니다.')
     }
     await ctx.db.delete(connectionId)
+    await applyConnectionDelta(ctx, conn, null)
     return null
   },
 })
 
-// 내 교류함: 받은/보낸 신청 각 최신순. 비로그인 null.
-export const mine = query({
-  args: { token: v.optional(v.string()) },
-  handler: async (ctx, { token }) => {
-    const me = await memberFromToken(ctx, token)
-    if (!me) return null
-    // 상대 요약 + (accepted 한정) 연락처를 합친 목록 항목
-    const toItem = async (c: Doc<'connections'>, otherId: Doc<'members'>['_id']) => {
+// 상대 요약 + (accepted 한정) 연락처를 합친 목록 항목으로 변환.
+// 연락처(phone)는 수락된 교류에서만 상호 공개한다.
+async function hydrate(
+  ctx: QueryCtx,
+  meId: Id<'members'>,
+  docs: Doc<'connections'>[],
+) {
+  const items = await Promise.all(
+    docs.map(async (c) => {
+      const otherId = c.fromId === meId ? c.toId : c.fromId
       const other = await ctx.db.get(otherId)
       if (!other) return null // 상대 레코드가 사라진 항목은 목록에서 제외
       return {
@@ -189,31 +219,89 @@ export const mine = query({
         createdAt: c.createdAt,
         respondedAt: c.respondedAt,
         other: toOtherSummary(other),
-        // 연락처는 수락된 교류에서만 상호 공개
         phone: c.status === 'accepted' ? other.phone : undefined,
       }
+    }),
+  )
+  return items.filter((i): i is NonNullable<typeof i> => i !== null)
+}
+
+/**
+ * 내 교류함 받은/보낸 탭 — by_to / by_from 인덱스 커서 페이지네이션.
+ * 수락된 건은 '연결' 탭(connected 쿼리) 소관이라 페이지 안에서 제외한다.
+ */
+export const mine = query({
+  args: {
+    token: v.optional(v.string()),
+    box: v.union(v.literal('received'), v.literal('sent')),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, { token, box, paginationOpts }) => {
+    const me = await memberFromToken(ctx, token)
+    // 비로그인/세션 만료: 빈 페이지 (usePaginatedQuery 계약상 null을 반환할 수 없다)
+    if (!me) return { page: [], isDone: true, continueCursor: '' }
+    const result =
+      box === 'received'
+        ? await ctx.db
+            .query('connections')
+            .withIndex('by_to', (q) => q.eq('toId', me._id))
+            .order('desc')
+            .paginate(paginationOpts)
+        : await ctx.db
+            .query('connections')
+            .withIndex('by_from', (q) => q.eq('fromId', me._id))
+            .order('desc')
+            .paginate(paginationOpts)
+    return {
+      ...result,
+      // accepted는 '연결' 탭에서만 노출 → 받은/보낸 탭에서는 제외
+      page: await hydrate(
+        ctx,
+        me._id,
+        result.page.filter((c) => c.status !== 'accepted'),
+      ),
     }
-    const receivedDocs = await ctx.db
-      .query('connections')
-      .withIndex('by_to', (q) => q.eq('toId', me._id))
-      .order('desc')
-      .collect()
-    const sentDocs = await ctx.db
-      .query('connections')
-      .withIndex('by_from', (q) => q.eq('fromId', me._id))
-      .order('desc')
-      .collect()
-    const received = []
-    for (const c of receivedDocs) {
-      const item = await toItem(c, c.fromId)
-      if (item) received.push(item)
+  },
+})
+
+/**
+ * 내 교류함 '연결' 탭 — 수락된 교류(양방향).
+ *
+ * 내가 보낸 것(by_from_status)과 받은 것(by_to_status)은 서로 다른 인덱스라
+ * 단일 커서로 이을 수 없다. 그래서 방향별 CONNECTED_PER_DIRECTION건까지 읽어
+ * 응답 시각 내림차순으로 합치고, 상한에 걸렸으면 hasMore=true로 알린다.
+ * 읽는 문서 수는 회원 수와 무관하게 2 × CONNECTED_PER_DIRECTION으로 고정된다.
+ */
+export const connected = query({
+  args: { token: v.optional(v.string()) },
+  handler: async (ctx, { token }) => {
+    const me = await memberFromToken(ctx, token)
+    if (!me) return null
+    const [asTo, asFrom] = await Promise.all([
+      ctx.db
+        .query('connections')
+        .withIndex('by_to_status', (q) =>
+          q.eq('toId', me._id).eq('status', 'accepted'),
+        )
+        .order('desc')
+        .take(CONNECTED_PER_DIRECTION),
+      ctx.db
+        .query('connections')
+        .withIndex('by_from_status', (q) =>
+          q.eq('fromId', me._id).eq('status', 'accepted'),
+        )
+        .order('desc')
+        .take(CONNECTED_PER_DIRECTION),
+    ])
+    const merged = [...asTo, ...asFrom].sort(
+      (a, b) => (b.respondedAt ?? b.createdAt) - (a.respondedAt ?? a.createdAt),
+    )
+    return {
+      items: await hydrate(ctx, me._id, merged),
+      hasMore:
+        asTo.length === CONNECTED_PER_DIRECTION ||
+        asFrom.length === CONNECTED_PER_DIRECTION,
     }
-    const sent = []
-    for (const c of sentDocs) {
-      const item = await toItem(c, c.toId)
-      if (item) sent.push(item)
-    }
-    return { received, sent }
   },
 })
 
@@ -225,21 +313,10 @@ export const statusWith = query({
     const me = await memberFromToken(ctx, token)
     if (!me) return null
     if (memberId === me._id) return null
-    const sent = await ctx.db
-      .query('connections')
-      .withIndex('by_from', (q) => q.eq('fromId', me._id))
-      .collect()
-    const received = await ctx.db
-      .query('connections')
-      .withIndex('by_to', (q) => q.eq('toId', me._id))
-      .collect()
+    const { outgoing, incoming } = await pairConnections(ctx, me._id, memberId)
     const candidates = [
-      ...sent
-        .filter((c) => c.toId === memberId)
-        .map((c) => ({ c, direction: 'sent' as const })),
-      ...received
-        .filter((c) => c.fromId === memberId)
-        .map((c) => ({ c, direction: 'received' as const })),
+      ...outgoing.map((c) => ({ c, direction: 'sent' as const })),
+      ...incoming.map((c) => ({ c, direction: 'received' as const })),
     ].filter(({ c }) => c.status !== 'declined')
     if (candidates.length === 0) return null
     // accepted 우선, 같은 상태면 최신 우선
@@ -269,15 +346,18 @@ export const statusWith = query({
 })
 
 // 받은 신청 중 대기중 개수 (탭 뱃지용). 비로그인 0.
+// by_to_status 인덱스로 pending만 읽고 뱃지 상한까지만 센다.
 export const pendingReceivedCount = query({
   args: { token: v.optional(v.string()) },
   handler: async (ctx, { token }) => {
     const me = await memberFromToken(ctx, token)
     if (!me) return 0
-    const received = await ctx.db
+    const rows = await ctx.db
       .query('connections')
-      .withIndex('by_to', (q) => q.eq('toId', me._id))
-      .collect()
-    return received.filter((c) => c.status === 'pending').length
+      .withIndex('by_to_status', (q) =>
+        q.eq('toId', me._id).eq('status', 'pending'),
+      )
+      .take(PENDING_BADGE_LIMIT)
+    return rows.length
   },
 })

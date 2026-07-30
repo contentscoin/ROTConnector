@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from 'convex/react'
+import { usePaginatedQuery } from 'convex/react'
 import { Plus, Inbox, Search, X } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import {
   Chip,
   EmptyState,
   Input,
+  LoadMore,
   PageHeader,
   SegmentedControl,
   SkeletonList,
@@ -41,6 +42,9 @@ const categories = [
 
 const urgencyRank: Record<string, number> = { high: 0, normal: 1, low: 2 }
 
+// 한 번에 받아오는 요청 수 (커서 페이지네이션)
+const PAGE_SIZE = 20
+
 export function RequestsPage() {
   const { member } = useSession()
   const [status, setStatus] = useState<StatusFilter>('all')
@@ -51,23 +55,31 @@ export function RequestsPage() {
 
   const debouncedQ = useDebounce(q, 300)
 
-  const requests = useQuery(api.requests.list, {
-    status: status === 'all' ? undefined : status,
-    category: category || undefined,
-    q: debouncedQ || undefined,
-  })
+  // 1000명 기준: 피드는 커서 페이지네이션. 상태·분류·검색어가 바뀌면 첫 페이지부터 다시 받는다
+  // (검색어는 300ms 디바운스 유지).
+  const {
+    results: requests,
+    status: pageStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.requests.list,
+    {
+      status: status === 'all' ? undefined : status,
+      category: category || undefined,
+      q: debouncedQ || undefined,
+    },
+    { initialNumItems: PAGE_SIZE },
+  )
 
-  // list는 createdAt desc 고정 → mine 필터 + 긴급도 정렬만 클라이언트에서.
+  // 서버는 createdAt desc 고정 → mine 필터 + 긴급도 정렬은 받아온 페이지 안에서.
   const visible = requests
-    ? requests
-        .filter((r) => !mineOnly || (member && r.authorId === member._id))
-        .slice()
-        .sort((a, b) =>
-          sort === 'urgent'
-            ? (urgencyRank[a.urgency] ?? 9) - (urgencyRank[b.urgency] ?? 9)
-            : 0,
-        )
-    : undefined
+    .filter((r) => !mineOnly || (member && r.authorId === member._id))
+    .slice()
+    .sort((a, b) =>
+      sort === 'urgent'
+        ? (urgencyRank[a.urgency] ?? 9) - (urgencyRank[b.urgency] ?? 9)
+        : 0,
+    )
 
   return (
     <div className="space-y-4">
@@ -140,7 +152,7 @@ export function RequestsPage() {
         />
       </div>
 
-      {visible === undefined ? (
+      {pageStatus === 'LoadingFirstPage' ? (
         <SkeletonList count={5} />
       ) : visible.length === 0 ? (
         <EmptyState
@@ -159,6 +171,8 @@ export function RequestsPage() {
           ))}
         </div>
       )}
+
+      <LoadMore status={pageStatus} onLoadMore={loadMore} pageSize={PAGE_SIZE} />
 
       {/* FAB (하단 중앙 고정) */}
       <Link

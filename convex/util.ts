@@ -25,6 +25,82 @@ export function normalizeCohort(s?: string): string | undefined {
   return m ? m[1] : t
 }
 
+/**
+ * 회원 전문 검색용 결합 텍스트.
+ * Convex searchIndex는 단일 문자열 필드만 대상으로 하므로, 기존에 메모리에서
+ * 훑던 필드(이름·회사·직함·소개·기수·학교·지역 + 배열 태그)를 하나로 합쳐 저장한다.
+ * phone은 절대 포함하지 않는다 — 검색어로 전화번호를 넣어 회원을 특정하는
+ * 역질의(공개 디렉토리 PII 유출)를 막기 위함.
+ */
+export function buildMemberSearchText(m: {
+  name: string
+  company?: string
+  title?: string
+  intro?: string
+  products?: string
+  customers?: string
+  cohort?: string
+  university?: string
+  region?: string
+  industry: string[]
+  helpOffer: string[]
+  helpNeed: string[]
+}): string {
+  return [
+    m.name,
+    m.company ?? '',
+    m.title ?? '',
+    m.intro ?? '',
+    m.products ?? '',
+    m.customers ?? '',
+    m.cohort ?? '',
+    m.university ?? '',
+    m.region ?? '',
+    ...m.industry,
+    ...m.helpOffer,
+    ...m.helpNeed,
+  ]
+    .join(' ')
+    .trim()
+}
+
+// 요청 전문 검색용 결합 텍스트 (제목·본문·분류·태그).
+export function buildRequestSearchText(r: {
+  title: string
+  body: string
+  category: string
+  tags: string[]
+}): string {
+  return [r.title, r.body, r.category, ...r.tags].join(' ').trim()
+}
+
+// 프로필 완성률 0~100. src/lib/profile.ts와 동일한 9개 필드 기준 —
+// 평균 완성률/미작성 회원 추출을 인덱스로 처리하기 위해 members.profileScore에 캐시한다.
+export function memberProfileScore(m: {
+  intro?: string
+  company?: string
+  title?: string
+  region?: string
+  cohort?: string
+  university?: string
+  industry: string[]
+  helpOffer: string[]
+  helpNeed: string[]
+}): number {
+  const checks = [
+    !!m.intro?.trim(),
+    !!m.company?.trim(),
+    !!m.title?.trim(),
+    !!m.region?.trim(),
+    m.industry.length > 0,
+    m.helpOffer.length > 0,
+    m.helpNeed.length > 0,
+    !!m.cohort?.trim(),
+    !!m.university?.trim(),
+  ]
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100)
+}
+
 // 느슨한 토큰 매칭: 동일하거나 한쪽이 다른 쪽을 포함하면 일치(예: '투자' ⊂ '투자 유치').
 // 1자 토큰은 부분문자열 오탐('법'⊂'방법')이 심해 정확일치만 인정.
 export function termsOverlap(a: string[], b: string[]): number {
