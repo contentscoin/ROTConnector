@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Layout } from './components/Layout'
 import { LoadingScreen } from './components/ui'
 import { useSession } from './lib/session'
@@ -38,6 +38,14 @@ function Protected({
 }
 
 export default function App() {
+  useEffect(() => {
+    const splash = document.getElementById('splash')
+    if (splash) {
+      splash.style.opacity = '0'
+      setTimeout(() => splash.remove(), 300)
+    }
+  }, [])
+
   return (
     <Layout>
       <Routes>
