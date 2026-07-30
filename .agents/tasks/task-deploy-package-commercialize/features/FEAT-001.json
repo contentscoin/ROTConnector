@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "CI/CD pipeline and build optimization: Add GitHub Actions workflow for automated builds, Vercel preview deploys, and Convex deploy steps. Add production build optimizations (chunk splitting, compression hints).",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create .github/workflows/ci.yml with: pnpm install, lint (pnpm lint), type-check and build (pnpm build), with caching for pnpm store. Trigger on push to main and PRs.",
     "Create .github/workflows/deploy.yml with: production deploy steps (comments/docs only since tokens needed) - Vercel deploy via vercel --prod, Convex deploy via npx convex deploy. Trigger on push to main only. Include environment secrets placeholders (VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID, CONVEX_DEPLOY_KEY).",
@@ -20,5 +20,5 @@
     "Run pnpm build and confirm it succeeds with chunk splitting producing separate vendor/convex/firebase chunks in dist/assets/"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "TypeScript 6 strict mode requires manualChunks to be a function (not object literal) due to type inference with Vite 8 rollup options. Used function form with id.includes() checks. Build produces separate vendor (182KB), convex (77KB), firebase (49KB) chunks successfully."
 }
