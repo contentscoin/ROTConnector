@@ -1,0 +1,7 @@
+{
+  "task_id": "task-deploy-package-commercialize",
+  "task_description": "배포 및 패키징하고 상용화: Set up CI/CD pipeline, configure native app packaging for store submission, and add commercialization requirements (legal pages, security headers, error tracking, SEO, app store metadata).",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}

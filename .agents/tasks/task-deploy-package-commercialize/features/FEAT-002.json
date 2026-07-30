@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Native mobile app packaging: Configure Android release signing, iOS release scheme, proper versioning for both platforms, app store metadata files, and Fastlane-ready directory structure.",
+  "status": "pending",
+  "steps": [
+    "Update android/app/build.gradle: add signingConfigs block for release (reading from environment variables or keystore.properties), enable minification with R8 for release builds, set versionCode to 1 and versionName to 1.0.0.",
+    "Create android/keystore.properties.example with placeholder values documenting required signing config (storeFile, storePassword, keyAlias, keyPassword).",
+    "Create android/app/src/main/res/values/strings.xml update: ensure app_name is '알비연 링크'.",
+    "Create fastlane/metadata/android/ko-KR/ directory structure with: title.txt ('알비연 링크'), short_description.txt, full_description.txt (Korean app store description highlighting ROTC business network features).",
+    "Create fastlane/metadata/ios/ko/ directory structure with: name.txt, subtitle.txt, description.txt, keywords.txt, privacy_url.txt (pointing to /privacy in-app route), support_url.txt.",
+    "Update ios/App/App/Info.plist: add NSAppTransportSecurity for HTTPS enforcement, ITSAppUsesNonExemptEncryption=NO (no custom encryption), privacy usage descriptions if needed.",
+    "Update capacitor.config.ts: add plugins config for SplashScreen (auto-hide delay, fade duration) and StatusBar styling.",
+    "Create scripts/build-android.sh documenting the Android release build steps (clean, bundle, sign).",
+    "Create scripts/build-ios.sh documenting the iOS archive/export steps."
+  ],
+  "acceptance_criteria": [
+    "pnpm build succeeds (no TypeScript errors from capacitor.config.ts changes)",
+    "android/app/build.gradle has release signingConfig block",
+    "fastlane/metadata/ directories exist with Korean store listing content",
+    "scripts/build-android.sh and scripts/build-ios.sh exist with documented steps"
+  ],
+  "verification": [
+    "Run pnpm build and confirm success (TypeScript + Vite)",
+    "Verify fastlane metadata files exist and contain Korean content"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

@@ -5,6 +5,28 @@
 
 ---
 
+## 0. CI/CD 파이프라인
+
+GitHub Actions 워크플로우가 자동 빌드와 배포를 처리합니다.
+
+### CI (`.github/workflows/ci.yml`)
+- **트리거**: `main` 브랜치 push 및 PR
+- **단계**: pnpm install -> lint -> type-check + build
+- PR 머지 전 빌드 성공 필수
+
+### 프로덕션 배포 (`.github/workflows/deploy.yml`)
+- **트리거**: `main` 브랜치 push (머지 시 자동 배포)
+- **단계**: build -> Convex deploy -> Vercel production deploy
+- **필요 시크릿** (GitHub Settings > Secrets에서 설정):
+  - `VERCEL_TOKEN` - Vercel 개인 액세스 토큰
+  - `VERCEL_ORG_ID` - Vercel 팀/조직 ID
+  - `VERCEL_PROJECT_ID` - Vercel 프로젝트 ID
+  - `CONVEX_DEPLOY_KEY` - Convex 프로덕션 배포 키
+
+> **참고**: 시크릿 미설정 시 수동 배포(아래 섹션 2, 4) 사용.
+
+---
+
 ## 1. 사전 점검 (코드)
 
 - [ ] `pnpm build` 로컬 성공 (`tsc -b && vite build`)
