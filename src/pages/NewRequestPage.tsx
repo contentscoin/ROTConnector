@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from 'convex/react'
 import { ChevronLeft } from 'lucide-react'
@@ -15,7 +15,8 @@ import {
   Textarea,
   useToast,
 } from '../components/ui'
-import { addTag, errorMessage, splitTags } from '../lib/utils'
+import { addTag, splitTags } from '../lib/utils'
+import { useFormSubmit } from '../lib/hooks'
 
 const categories = [
   '투자',
@@ -50,31 +51,23 @@ export function NewRequestPage() {
   const [region, setRegion] = useState('')
   const [tags, setTags] = useState('')
   const [urgency, setUrgency] = useState<'low' | 'normal' | 'high'>('normal')
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault()
+  const handler = useCallback(async () => {
     if (!token) return
-    setError(null)
-    setLoading(true)
-    try {
-      const id = await createRequest({
-        token,
-        title: title.trim(),
-        body: body.trim(),
-        category,
-        region: region || undefined,
-        tags: splitTags(tags),
-        urgency,
-      })
-      toast('도움요청이 등록되었습니다.')
-      navigate(`/requests/${id}`, { replace: true })
-    } catch (err) {
-      setError(errorMessage(err))
-      setLoading(false)
-    }
-  }
+    const id = await createRequest({
+      token,
+      title: title.trim(),
+      body: body.trim(),
+      category,
+      region: region || undefined,
+      tags: splitTags(tags),
+      urgency,
+    })
+    toast('도움요청이 등록되었습니다.')
+    navigate(`/requests/${id}`, { replace: true })
+  }, [token, createRequest, title, body, category, region, tags, urgency, toast, navigate])
+
+  const { submit, loading, error } = useFormSubmit(handler)
 
   return (
     <div className="space-y-4">
@@ -88,7 +81,7 @@ export function NewRequestPage() {
       <PageHeader eyebrow="알비연 링크" title="도움요청 등록" />
 
       <Card className="p-5">
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={submit} className="space-y-4">
           <Field label="제목" required>
             <Input
               placeholder="어떤 도움이 필요하신가요?"

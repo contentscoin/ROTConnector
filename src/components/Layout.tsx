@@ -54,9 +54,17 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-[480px] flex-col bg-navy-50">
+      {/* Skip to content (accessibility) */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-navy-800 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        본문으로 건너뛰기
+      </a>
+
       {/* Header */}
       <header className="glass sticky top-0 z-20 flex h-14 items-center justify-between border-b border-navy-100 px-4">
-        <Link to="/" className="flex items-center gap-2">
+        <Link to="/" className="flex items-center gap-2" aria-label="알비연 링크 홈으로">
           <span className="flex size-7 items-center justify-center rounded-lg bg-navy-800 text-xs font-black text-gold-400">
             ROT
           </span>
@@ -97,10 +105,13 @@ export function Layout({ children }: { children: ReactNode }) {
       </header>
 
       {/* Content */}
-      <main className="flex-1 px-4 pt-4 pb-32">{children}</main>
+      <main id="main-content" className="flex-1 px-4 pt-4 pb-32">{children}</main>
 
       {/* Bottom Nav */}
-      <nav className="glass safe-bottom fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-[480px] items-stretch border-t border-navy-100 px-2 pt-1.5">
+      <nav
+        className="glass safe-bottom fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-[480px] items-stretch border-t border-navy-100 px-2 pt-1.5"
+        aria-label="메인 내비게이션"
+      >
         {visibleTabs.map(({ to, label, icon: Icon }) => {
           const active =
             to === '/' ? pathname === '/' : pathname.startsWith(to)

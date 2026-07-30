@@ -14,6 +14,15 @@ if (!convexUrl) {
 }
 const convex = new ConvexReactClient(convexUrl)
 
+// Remove splash screen once React mounts
+function removeSplash() {
+  const splash = document.getElementById('splash')
+  if (splash) {
+    splash.style.opacity = '0'
+    setTimeout(() => splash.remove(), 300)
+  }
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
@@ -29,3 +38,14 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 )
+
+removeSplash()
+
+// Register service worker for PWA installability
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.warn('[SW] Registration failed:', err)
+    })
+  })
+}

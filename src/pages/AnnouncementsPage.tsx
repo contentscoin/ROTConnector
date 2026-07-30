@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useCallback } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import type { FunctionReturnType } from 'convex/server'
 import { Megaphone, Pin, Plus } from 'lucide-react'
@@ -20,6 +20,7 @@ import {
 } from '../components/ui'
 import { timeAgo } from '../lib/format'
 import { errorMessage } from '../lib/utils'
+import { useFormSubmit } from '../lib/hooks'
 
 type Category = 'notice' | 'promotion' | 'bizroom'
 
@@ -190,29 +191,22 @@ function CreateForm({
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [cat, setCat] = useState<Category>(isAdmin ? 'notice' : 'promotion')
-  const [busy, setBusy] = useState(false)
 
   const categories: Category[] = isAdmin
     ? ['notice', 'promotion', 'bizroom']
     : ['promotion', 'bizroom']
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      await create({ token, title: title.trim(), body: body.trim(), category: cat })
-      toast('게시글이 등록되었습니다.')
-      onDone()
-    } catch (err) {
-      toast(errorMessage(err))
-    } finally {
-      setBusy(false)
-    }
-  }
+  const handler = useCallback(async () => {
+    await create({ token, title: title.trim(), body: body.trim(), category: cat })
+    toast('게시글이 등록되었습니다.')
+    onDone()
+  }, [create, token, title, body, cat, toast, onDone])
+
+  const { submit, loading, error } = useFormSubmit(handler)
 
   return (
     <Card className="space-y-3 p-4">
-      <form onSubmit={onSubmit} className="space-y-3">
+      <form onSubmit={submit} className="space-y-3">
         <Field label="카테고리">
           <Select value={cat} onChange={(e) => setCat(e.target.value as Category)}>
             {categories.map((c) => (
@@ -237,10 +231,15 @@ function CreateForm({
             onChange={(e) => setBody(e.target.value)}
           />
         </Field>
+        {error && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+            {error}
+          </p>
+        )}
         <div className="flex gap-2">
           <Button
             type="submit"
-            loading={busy}
+            loading={loading}
             disabled={!title.trim() || !body.trim()}
           >
             등록
