@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   LogIn,
   Bell,
+  Megaphone,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useQuery } from 'convex/react'
@@ -28,6 +29,7 @@ const tabs: Tab[] = [
   { to: '/', label: '홈', icon: Home },
   { to: '/members', label: '회원', icon: Users },
   { to: '/requests', label: '요청', icon: Handshake },
+  { to: '/community', label: '커뮤니티', icon: Megaphone },
   { to: '/connections', label: '교류', icon: ArrowLeftRight, memberOnly: true },
   { to: '/me', label: '내 정보', icon: UserRound },
   { to: '/admin', label: '운영', icon: ShieldCheck, adminOnly: true },

@@ -10,6 +10,7 @@ import {
   UserPlus,
   Clock,
   Award,
+  Zap,
 } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
@@ -367,6 +368,24 @@ export function AdminOverview({ token }: { token: string }) {
         </section>
       )}
 
+      {/* 빠른 매칭 (상위 3건 open 요청에 대한 추천 helper) */}
+      {data.pendingRequests.length > 0 && (
+        <section>
+          <SectionHeader
+            title="빠른 매칭"
+            icon={<Zap className="size-5" />}
+          />
+          <div className="space-y-2.5">
+            {data.pendingRequests
+              .filter((r) => r.status === 'open')
+              .slice(0, 3)
+              .map((r) => (
+                <QuickMatchCard key={r._id} token={token} request={r} />
+              ))}
+          </div>
+        </section>
+      )}
+
       {/* 처리 대기 요청 */}
       <section>
         <SectionHeader title="처리 대기 요청" />
@@ -403,5 +422,87 @@ export function AdminOverview({ token }: { token: string }) {
         )}
       </section>
     </div>
+  )
+}
+
+// 빠른 매칭 카드: 요청 + 추천 1위 helper, 원클릭 제안
+function QuickMatchCard({
+  token,
+  request,
+}: {
+  token: string
+  request: { _id: Id<'requests'>; title: string; category: string; authorName: string }
+}) {
+  const recommend = useQuery(api.members.recommendForRequest, {
+    token,
+    requestId: request._id,
+    limit: 1,
+  })
+  const propose = useMutation(api.matches.propose)
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const top = recommend?.[0]
+
+  async function onPropose() {
+    if (!top) return
+    setBusy(true)
+    setError(null)
+    try {
+      await propose({
+        token,
+        requestId: request._id,
+        helperId: top.member._id,
+      })
+      setDone(true)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="mb-1 flex items-center gap-2">
+        <span className="text-xs font-semibold text-navy-500">
+          {request.category}
+        </span>
+        <span className="truncate font-bold text-navy-900">
+          {request.title}
+        </span>
+      </div>
+      <p className="text-xs text-navy-400">요청: {request.authorName}</p>
+      {top ? (
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-sm text-navy-700">
+            추천: <b>{top.member.name}</b>
+            {top.member.company ? ` (${top.member.company})` : ''}
+          </span>
+          {done ? (
+            <Badge className="bg-emerald-100 text-emerald-700 ml-auto">
+              제안 완료
+            </Badge>
+          ) : (
+            <Button
+              size="sm"
+              className="ml-auto"
+              loading={busy}
+              onClick={onPropose}
+            >
+              연결
+            </Button>
+          )}
+        </div>
+      ) : recommend !== undefined ? (
+        <p className="mt-2 text-xs text-navy-400">
+          적합한 추천 회원이 없습니다.
+        </p>
+      ) : null}
+      {error && (
+        <p className="mt-1 text-xs text-red-600">{error}</p>
+      )}
+    </Card>
   )
 }

@@ -293,6 +293,62 @@ export const recommendForMember = query({
   },
 })
 
+// 내 활동 통계 (프로필 페이지용). 기존 테이블에서 집계.
+export const myStats = query({
+  args: { token: v.optional(v.string()) },
+  handler: async (ctx, { token }) => {
+    const me = await memberFromToken(ctx, token)
+    if (!me) return null
+
+    // 교류: accepted 건수
+    const connectionsFrom = await ctx.db
+      .query('connections')
+      .withIndex('by_from', (q) => q.eq('fromId', me._id))
+      .collect()
+    const connectionsTo = await ctx.db
+      .query('connections')
+      .withIndex('by_to', (q) => q.eq('toId', me._id))
+      .collect()
+    const acceptedConnections = [
+      ...connectionsFrom.filter((c) => c.status === 'accepted'),
+      ...connectionsTo.filter((c) => c.status === 'accepted'),
+    ].length
+
+    // 내 도움요청 수
+    const myRequests = await ctx.db
+      .query('requests')
+      .withIndex('by_author', (q) => q.eq('authorId', me._id))
+      .collect()
+
+    // helper로서 완료된 매칭 수 (status=done)
+    const myMatches = await ctx.db
+      .query('matches')
+      .withIndex('by_helper', (q) => q.eq('helperId', me._id))
+      .collect()
+    const helperDone = myMatches.filter((m) => m.status === 'done').length
+
+    // 기여 breakdown
+    const contributions = await ctx.db
+      .query('contributions')
+      .withIndex('by_member', (q) => q.eq('memberId', me._id))
+      .collect()
+    const contribByType = new Map<string, number>()
+    let totalPoints = 0
+    for (const c of contributions) {
+      contribByType.set(c.type, (contribByType.get(c.type) ?? 0) + c.points)
+      totalPoints += c.points
+    }
+
+    return {
+      acceptedConnections,
+      requestsPosted: myRequests.length,
+      helperDone,
+      totalPoints,
+      contribByType: Object.fromEntries(contribByType),
+    }
+  },
+})
+
 // 동기·동문 수 (본인 제외 active). 홈/프로필의 "내 동기 N명" 진입점용.
 export const peerCounts = query({
   args: { token: v.optional(v.string()) },

@@ -11,6 +11,7 @@ import {
   Award,
   ShieldCheck,
   ExternalLink,
+  Download,
 } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
@@ -43,6 +44,8 @@ export function AdminMembers({ token }: { token: string }) {
     q: q.trim() || undefined,
     status,
   })
+
+  const memberSummary = useQuery(api.admin.memberSummary, { token })
 
   const setStatusMut = useMutation(api.members.setStatus)
   const setAdminMut = useMutation(api.members.setAdmin)
@@ -79,8 +82,49 @@ export function AdminMembers({ token }: { token: string }) {
     }
   }
 
+  function downloadCSV() {
+    if (!memberSummary) return
+    const headers = ['이름', '전화번호', '회사', '기수', '학교', '업종', '지역', '상태', '기여점수', '가입일']
+    const rows = memberSummary.map((m) => [
+      m.name,
+      m.phone,
+      m.company,
+      m.cohort,
+      m.university,
+      m.industry,
+      m.region,
+      m.status,
+      String(m.contributionScore),
+      new Date(m.createdAt).toLocaleDateString('ko-KR'),
+    ])
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+    const BOM = '\uFEFF'
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `회원목록_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-4">
+      {/* CSV 내보내기 */}
+      <div className="flex justify-end">
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={!memberSummary}
+          onClick={downloadCSV}
+        >
+          <Download className="size-4" />
+          CSV 내보내기
+        </Button>
+      </div>
+
       {/* 검색 */}
       <div className="relative">
         <Search className="absolute top-1/2 left-3.5 size-4.5 -translate-y-1/2 text-navy-400" />
