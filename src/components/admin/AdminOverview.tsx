@@ -34,6 +34,7 @@ import {
 } from '../../lib/format'
 import { errorMessage } from '../../lib/utils'
 import { profileCompleteness } from '../../lib/profile'
+import { useDebounce } from '../../lib/useDebounce'
 
 const contributionTypes = [
   'sponsor',
@@ -45,7 +46,15 @@ const contributionTypes = [
 
 export function AdminOverview({ token }: { token: string }) {
   const data = useQuery(api.admin.dashboard, { token })
-  const members = useQuery(api.members.list, {})
+  // 1000명 기준: <Select>에 전체 회원을 담지 않는다. 검색어 기반 상위 후보만 받아온다.
+  const [memberQuery, setMemberQuery] = useState('')
+  const debouncedMemberQuery = useDebounce(memberQuery, 300)
+  const memberOptions = useQuery(api.members.picker, {
+    token,
+    q: debouncedMemberQuery.trim() || undefined,
+  })
+  // 프로필 미작성 회원은 members.profileScore 인덱스로 서버가 골라 보낸다
+  const incompleteMembers = useQuery(api.admin.incompleteMembers, { token })
   const approve = useMutation(api.members.approve)
   const createMember = useMutation(api.members.create)
   const awardContribution = useMutation(api.contributions.award)
@@ -96,13 +105,11 @@ export function AdminOverview({ token }: { token: string }) {
   }
 
   const s = data.stats
-
-  // 프로필 미작성(완성도 60% 미만) 회원 — 리마인드 대상
-  const incompleteMembers = (members ?? [])
-    .map((m) => ({ m, c: profileCompleteness(m) }))
-    .filter((x) => x.c.percent < 60)
-    .sort((a, b) => a.c.percent - b.c.percent)
-    .slice(0, 20)
+  // 미작성 항목 라벨은 클라이언트에서 계산 (서버는 상위 20명만 골라 보낸다)
+  const incomplete = (incompleteMembers ?? []).map((m) => ({
+    m,
+    c: profileCompleteness(m),
+  }))
 
   async function onApprove(id: Id<'members'>) {
     setBusy(true)
@@ -237,6 +244,13 @@ export function AdminOverview({ token }: { token: string }) {
       >
         <form onSubmit={onAward} className="space-y-3">
             <Field label="회원" required>
+              {/* 회원 검색 → 상위 후보만 <Select>에 채운다 (전체 목록 로드 없음) */}
+              <Input
+                className="mb-2"
+                placeholder="이름·회사·기수로 회원 검색"
+                value={memberQuery}
+                onChange={(e) => setMemberQuery(e.target.value)}
+              />
               <Select
                 value={award.memberId}
                 onChange={(e) =>
@@ -244,7 +258,7 @@ export function AdminOverview({ token }: { token: string }) {
                 }
               >
                 <option value="">회원 선택</option>
-                {members?.map((m) => (
+                {memberOptions?.map((m) => (
                   <option key={m._id} value={m._id}>
                     {m.name}
                     {m.company ? ` (${m.company})` : ''}
@@ -336,11 +350,11 @@ export function AdminOverview({ token }: { token: string }) {
       )}
 
       {/* 프로필 미작성 회원 */}
-      {incompleteMembers.length > 0 && (
+      {incomplete.length > 0 && (
         <section>
           <SectionHeader title="프로필 미작성 회원" />
           <Card className="divide-y divide-navy-50">
-            {incompleteMembers.map(({ m, c }) => (
+            {incomplete.map(({ m, c }) => (
               <Link
                 key={m._id}
                 to={`/members/${m._id}`}

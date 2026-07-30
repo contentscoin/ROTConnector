@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { useQuery } from 'convex/react'
+import { usePaginatedQuery, useQuery } from 'convex/react'
 import {
   PlusCircle,
   Search,
@@ -28,23 +28,42 @@ const actions = [
 
 export function HomePage() {
   const { token, member } = useSession()
-  const requests = useQuery(api.requests.list, {})
+  // 홈은 미리보기 카드만 필요하므로 첫 페이지만 작게 받는다 (전체 로드 없음).
+  const { results: requests } = usePaginatedQuery(
+    api.requests.list,
+    {},
+    { initialNumItems: 8 },
+  )
   const leaders = useQuery(api.contributions.leaderboard, { limit: 5 })
-  const events = useQuery(api.events.list, {})
+  const { results: events } = usePaginatedQuery(
+    api.events.list,
+    {},
+    { initialNumItems: 6 },
+  )
   const recommended = useQuery(
     api.members.recommendForMember,
     token ? { token } : 'skip',
   )
   const facets = useQuery(api.members.facets, {})
-  // 최신 공지/홍보 2건 (커뮤니티 프리뷰)
-  const announcements = useQuery(api.announcements.list, { limit: 2 })
+  // 최신 공지/홍보 2건 (커뮤니티 프리뷰).
+  // 고정글은 별도 쿼리라(단일 인덱스로 '고정 우선 + 최신순'이 불가) 여기서 앞에 붙인다.
+  const pinnedAnnouncements = useQuery(api.announcements.pinned, {})
+  const { results: latestAnnouncements } = usePaginatedQuery(
+    api.announcements.list,
+    {},
+    { initialNumItems: 2 },
+  )
+  const announcements = [
+    ...(pinnedAnnouncements ?? []),
+    ...latestAnnouncements,
+  ].slice(0, 2)
   // 내 동기·동문 수 (본인 제외 active 기준)
   const peers = useQuery(api.members.peerCounts, token ? { token } : 'skip')
 
   const recent = requests
-    ?.filter((r) => r.status === 'open' || r.status === 'matching')
+    .filter((r) => r.status === 'open' || r.status === 'matching')
     .slice(0, 4)
-  const upcoming = events?.filter((e) => e.status === 'upcoming').slice(0, 2)
+  const upcoming = events.filter((e) => e.status === 'upcoming').slice(0, 2)
   const completeness = member ? profileCompleteness(member) : null
 
   return (
@@ -287,7 +306,7 @@ export function HomePage() {
       )}
 
       {/* 커뮤니티 소식 (최신 공지/홍보) */}
-      {announcements && announcements.length > 0 && (
+      {announcements.length > 0 && (
         <section>
           <HomeSection title="커뮤니티 소식" to="/community" />
           <div className="space-y-2.5">

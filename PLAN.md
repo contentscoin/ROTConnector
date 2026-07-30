@@ -62,15 +62,58 @@
 - **events** — 행사/후원 (Phase 2)
   `title, kind(event/sponsor), date, place, body, host, status, createdAt`
 - **sessions** — 파일럿 경량 세션 (phone 클레임)
+- **counters** — 집계 롤업 (스칼라). `key, value`
+  예: `members.active`, `requests.open`, `connections.accepted`,
+  `contributions.points.total`, `members.new.2026-06`, `event.<id>.going`
+- **facetCounts** — 값별 빈도 롤업 (활성 회원 기준). `field, value, count`
+  필터 칩·분포 통계·배열 필드(업종/도움분야)의 distinct 목록이 여기서 나온다.
 
-### 인덱스
-- members: by_phone, by_status, by_status_region, by_status_cohort, by_status_university
-  - 디렉토리 필터는 항상 `status='active'` 위에서 걸리므로 status 선행 복합 인덱스로 둔다.
-  - 업종(`industry`)·도움분야(`helpOffer`)는 **배열 필드**라 Convex 인덱스로 원소 단위
-    조회가 불가 → status 인덱스로 좁힌 뒤 메모리 필터(파일럿 ≤300명).
-- requests: by_status, by_author, by_category
-- matches: by_request, by_helper
-- contributions: by_member
+### 인덱스 / 데이터 접근 설계 (기준 규모: 회원 1000명)
+
+설계 기준은 **회원 1000명 + 그에 딸린 요청·매칭·기여·교류·알림**이다.
+Convex는 쿼리 1건당 스캔 문서 수·읽은 바이트에 상한이 있고, 목록 전체를 `.collect()`
+하면 읽는 문서 수가 회원 수와 함께 선형으로 늘어난다. 그래서 세 가지 원칙을 둔다.
+
+1. **목록은 전부 커서 페이지네이션** — 서버 `ctx.db.paginate(paginationOpts)`,
+   클라이언트 `usePaginatedQuery`. 회원 디렉토리·도움요청·커뮤니티·알림·행사·교류·
+   운영진 회원표가 모두 여기에 해당한다. 한 번에 읽는 문서 수는 페이지 크기로 고정.
+2. **집계는 쓰기 시 갱신하는 롤업에서 읽는다** — `counters`(스칼라)와
+   `facetCounts`(값별 빈도). 대시보드·통계·필터 칩은 테이블을 훑지 않고 단건 조회한다.
+   갱신 로직은 `convex/rollup.ts`에 모여 있고, 재계산은
+   `migrations:rebuildRollups`가 담당한다.
+3. **정렬 키를 인덱스 끝에 붙인다** — 예: `by_status_score = (status, contributionScore)`.
+   페이지네이션 중에도 '기여 점수 desc'를 서버가 보장하므로 메모리 정렬이 필요 없다.
+
+- **members**
+  - `by_phone`, `by_status`
+  - `by_status_score` `(status, contributionScore)` — 디렉토리 기본 정렬 + 기여 랭킹 take(N)
+  - `by_status_region` / `by_status_cohort` / `by_status_university`
+    — 각 `(status, 필드, contributionScore)`. 디렉토리 필터는 항상 `status='active'`
+    위에서 걸리므로 status 선행 복합 인덱스로 둔다.
+  - `by_status_connections` `(status, acceptedConnections)` — '활발한 교류 회원' take(5)
+  - `by_status_profile` `(status, profileScore)` — 프로필 미작성 리마인드 대상 오름차순 take(N)
+  - `search_text` (searchIndex) — 자유 텍스트 검색. **phone은 절대 포함하지 않는다**
+    (검색어에 전화번호를 넣어 회원을 특정하는 역질의를 막기 위함).
+  - 비정규화 필드: `searchText`, `profileScore`, `acceptedConnections`,
+    `unreadNotifications`. 쓰기 경로에서 항상 같이 갱신한다.
+- **배열 필드(업종 `industry` / 도움분야 `helpOffer`)**
+  Convex 인덱스는 배열 원소를 매칭할 수 없다. 별도 조인 테이블을 만드는 대신
+  **태그를 `searchText`에 함께 넣어** 검색 인덱스로 후보를 좁히고, 정확 일치는
+  받아온 페이지 안에서 확정한다. 태그 **목록**(필터 칩)은 조인 테이블 대신
+  `facetCounts`에서 빈도 상위 N개를 읽으므로 회원 수와 무관하게 비용이 고정된다.
+  (조인 테이블은 회원 1명 수정마다 태그 수만큼 쓰기가 발생하는데, 여기서 필요한
+  질의는 '태그 목록'과 '태그로 검색' 두 가지뿐이라 롤업 + 검색 인덱스로 충분하다.)
+- **requests**: `by_status`, `by_author`, `by_category`, `search_text`(searchIndex) + `searchText`
+- **matches**: `by_request`, `by_request_helper`(중복 매칭 차단 단건 조회), `by_helper`
+- **contributions**: `by_member`, `by_ref`(매칭 롤백 시 해당 매칭 기여만 역적립)
+- **connections**: `by_from`, `by_to`, `by_from_to`, `by_to_from`(상대와의 관계 O(1)),
+  `by_from_status`, `by_to_status`, `by_status_created`(운영진 모니터링)
+- **notifications**: `by_user`, `by_user_read`(안 읽은 것만)
+- **eventRsvps**: `by_event`, `by_member`, `by_event_member`(내 RSVP 단건),
+  `by_event_status`(명단 상태별 take(N))
+- **announcements**: `by_status_created`, `by_status_category_created`,
+  `by_status_pinned_created`(고정글 분리 조회)
+- **counters** `by_key` / **facetCounts** `by_field_value`, `by_field_count`
 
 ---
 
@@ -122,6 +165,10 @@
   - 성공: 회원 200 / 요청 70 / 연결 30 / 프로필 완성률 70%
 - **61–90일 AI 보조·성과 공개**: 요청 요약 AI, 소개문 생성 AI, 월간 리포트 자동화, 우수 사례 공개, 비즈니스룸/프로모션.
   - 성공: 회원 300 / 연결 60 / 행사 누적 150명 / 후원 실적 집계
+
+> 위 숫자는 **성장 목표**이고, 데이터 접근 설계의 **기준 규모는 회원 1000명**이다(§4).
+> 90일 목표(300명)에 맞춘 전체 스캔·메모리 필터는 쓰지 않는다 —
+> 목록은 커서 페이지네이션, 집계는 롤업, 검색은 검색 인덱스로 처리한다.
 
 ---
 

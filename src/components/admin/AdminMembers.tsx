@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation, useQuery } from 'convex/react'
+import { useConvex, useMutation, usePaginatedQuery } from 'convex/react'
 import type { FunctionReturnType } from 'convex/server'
 import {
   Search,
@@ -15,10 +15,20 @@ import {
 } from 'lucide-react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
-import { Badge, Button, Card, Chip, EmptyState, Input, SkeletonList } from '../ui'
+import {
+  Badge,
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  Input,
+  LoadMore,
+  SkeletonList,
+} from '../ui'
 import { formatCohort } from '../../lib/format'
 import { profileCompleteness } from '../../lib/profile'
 import { errorMessage } from '../../lib/utils'
+import { useDebounce } from '../../lib/useDebounce'
 
 // 상태 필터 칩 (전체 = undefined)
 const STATUS_FILTERS = [
@@ -35,17 +45,33 @@ const statusBadge: Record<string, { label: string; tone: string }> = {
   suspended: { label: '비활성', tone: 'bg-navy-100 text-navy-400' },
 }
 
+// 한 번에 받아오는 회원 수 (커서 페이지네이션)
+const PAGE_SIZE = 25
+
+// CSV 내보내기용 페이지 응답 (api.admin.memberSummary)
+type MemberSummaryPage = FunctionReturnType<typeof api.admin.memberSummary>
+
 export function AdminMembers({ token }: { token: string }) {
   const [q, setQ] = useState('')
   const [status, setStatus] = useState<string | undefined>(undefined)
+  const debouncedQ = useDebounce(q, 300)
 
-  const members = useQuery(api.admin.members, {
-    token,
-    q: q.trim() || undefined,
-    status,
-  })
+  // 1000명 기준: 운영진 회원 표도 커서 페이지네이션. 검색어는 서버 전문 인덱스
+  // (전화번호는 전체 번호 완전일치로 조회)를 쓰고 300ms 디바운스를 유지한다.
+  const {
+    results: members,
+    status: pageStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.admin.members,
+    { token, q: debouncedQ.trim() || undefined, status },
+    { initialNumItems: PAGE_SIZE },
+  )
 
-  const memberSummary = useQuery(api.admin.memberSummary, { token })
+  // CSV는 화면에 구독을 걸지 않고 버튼을 누를 때만 커서로 이어 받는다
+  // (전체 회원을 상시 구독하면 회원 수만큼 트래픽이 늘어난다).
+  const convex = useConvex()
+  const [csvBusy, setCsvBusy] = useState(false)
 
   const setStatusMut = useMutation(api.members.setStatus)
   const setAdminMut = useMutation(api.members.setAdmin)
@@ -82,32 +108,52 @@ export function AdminMembers({ token }: { token: string }) {
     }
   }
 
-  function downloadCSV() {
-    if (!memberSummary) return
-    const headers = ['이름', '전화번호', '회사', '기수', '학교', '업종', '지역', '상태', '기여점수', '가입일']
-    const rows = memberSummary.map((m) => [
-      m.name,
-      m.phone,
-      m.company,
-      m.cohort,
-      m.university,
-      m.industry,
-      m.region,
-      m.status,
-      String(m.contributionScore),
-      new Date(m.createdAt).toLocaleDateString('ko-KR'),
-    ])
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
-      .join('\n')
-    const BOM = '\uFEFF'
-    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `회원목록_${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+  async function downloadCSV() {
+    setError(null)
+    setCsvBusy(true)
+    try {
+      // 서버가 페이지 단위로 반환 → isDone까지 커서를 이어 붙여 전체를 모은다
+      const rows: string[][] = []
+      let cursor: string | null = null
+      for (;;) {
+        const res: MemberSummaryPage = await convex.query(
+          api.admin.memberSummary,
+          { token, cursor },
+        )
+        for (const m of res.rows) {
+          rows.push([
+            m.name,
+            m.phone,
+            m.company,
+            m.cohort,
+            m.university,
+            m.industry,
+            m.region,
+            m.status,
+            String(m.contributionScore),
+            new Date(m.createdAt).toLocaleDateString('ko-KR'),
+          ])
+        }
+        if (res.isDone) break
+        cursor = res.continueCursor
+      }
+      const headers = ['이름', '전화번호', '회사', '기수', '학교', '업종', '지역', '상태', '기여점수', '가입일']
+      const csvContent = [headers, ...rows]
+        .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
+        .join('\n')
+      const BOM = '\uFEFF'
+      const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `회원목록_${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setCsvBusy(false)
+    }
   }
 
   return (
@@ -117,8 +163,8 @@ export function AdminMembers({ token }: { token: string }) {
         <Button
           variant="secondary"
           size="sm"
-          disabled={!memberSummary}
-          onClick={downloadCSV}
+          loading={csvBusy}
+          onClick={() => void downloadCSV()}
         >
           <Download className="size-4" />
           CSV 내보내기
@@ -166,7 +212,7 @@ export function AdminMembers({ token }: { token: string }) {
       )}
 
       {/* 목록 */}
-      {members === undefined ? (
+      {pageStatus === 'LoadingFirstPage' ? (
         <SkeletonList count={6} />
       ) : members.length === 0 ? (
         <EmptyState
@@ -178,6 +224,7 @@ export function AdminMembers({ token }: { token: string }) {
         <>
           <p className="text-sm font-medium text-navy-400">
             {members.length}명
+            {pageStatus === 'CanLoadMore' ? '+' : ''}
           </p>
           <div className="space-y-2.5">
             {members.map((m) => (
@@ -192,12 +239,14 @@ export function AdminMembers({ token }: { token: string }) {
           </div>
         </>
       )}
+
+      <LoadMore status={pageStatus} onLoadMore={loadMore} pageSize={PAGE_SIZE} />
     </div>
   )
 }
 
-// 운영진 회원 목록 항목 타입 (api.admin.members 반환 — phone 포함)
-type AdminMember = FunctionReturnType<typeof api.admin.members>[number]
+// 운영진 회원 목록 항목 타입 (api.admin.members 반환 페이지 — phone 포함)
+type AdminMember = FunctionReturnType<typeof api.admin.members>['page'][number]
 
 function MemberRow({
   member: m,

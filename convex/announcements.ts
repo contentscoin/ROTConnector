@@ -1,5 +1,8 @@
 import { v } from 'convex/values'
+import { paginationOptsValidator } from 'convex/server'
 import { mutation, query } from './_generated/server'
+import type { QueryCtx } from './_generated/server'
+import type { Doc } from './_generated/dataModel'
 import { requireMember } from './auth'
 
 const categoryValidator = v.union(
@@ -8,46 +11,75 @@ const categoryValidator = v.union(
   v.literal('bizroom'),
 )
 
-// 공지/홍보/비즈룸 목록 (카테고리 필터, 최신순)
+// 상단 고정글 노출 상한 (운영진이 고정하는 공지 수는 소수)
+const PINNED_LIMIT = 10
+
+type Announcement = Doc<'announcements'>
+
+
+// author 요약 첨부
+async function withAuthor(ctx: QueryCtx, item: Announcement) {
+  const author = await ctx.db.get(item.authorId)
+  return {
+    _id: item._id,
+    title: item.title,
+    body: item.body,
+    category: item.category,
+    pinned: item.pinned,
+    createdAt: item.createdAt,
+    author: author
+      ? { _id: author._id, name: author.name, company: author.company }
+      : null,
+  }
+}
+
+/**
+ * 공지/홍보/비즈룸 목록 — 커서 페이지네이션 (활성 글만, 최신순).
+ *
+ * 1000명 기준 설계: 예전에는 전체 게시글을 collect한 뒤 메모리에서 status/category를
+ * 걸러 pinned 우선 정렬했다. 이제 status 선행 복합 인덱스로 페이지 단위로만 읽는다.
+ * 상단 고정글은 단일 인덱스로 '고정 우선 + 최신순'을 동시에 만족시킬 수 없으므로
+ * 별도 쿼리(pinned)로 분리하고, 이 목록에서는 고정글을 제외한다.
+ */
 export const list = query({
   args: {
+    paginationOpts: paginationOptsValidator,
     category: v.optional(categoryValidator),
-    limit: v.optional(v.number()),
   },
-  handler: async (ctx, { category, limit }) => {
-    const take = Math.min(Math.max(limit ?? 30, 1), 100)
-    let rows = await ctx.db
-      .query('announcements')
-      .withIndex('by_created')
-      .order('desc')
-      .collect()
-    rows = rows.filter((r) => r.status === 'active')
-    if (category) {
-      rows = rows.filter((r) => r.category === category)
-    }
-    // pinned 상단 고정
-    rows.sort((a, b) => {
-      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-      return b.createdAt - a.createdAt
-    })
-    const items = rows.slice(0, take)
-    // author 요약 첨부
-    return await Promise.all(
-      items.map(async (item) => {
-        const author = await ctx.db.get(item.authorId)
-        return {
-          _id: item._id,
-          title: item.title,
-          body: item.body,
-          category: item.category,
-          pinned: item.pinned,
-          createdAt: item.createdAt,
-          author: author
-            ? { _id: author._id, name: author.name, company: author.company }
-            : null,
-        }
-      }),
+  handler: async (ctx, { paginationOpts, category }) => {
+    const result = category
+      ? await ctx.db
+          .query('announcements')
+          .withIndex('by_status_category_created', (q) =>
+            q.eq('status', 'active').eq('category', category),
+          )
+          .order('desc')
+          .paginate(paginationOpts)
+      : await ctx.db
+          .query('announcements')
+          .withIndex('by_status_created', (q) => q.eq('status', 'active'))
+          .order('desc')
+          .paginate(paginationOpts)
+    const page = await Promise.all(
+      result.page.filter((item) => !item.pinned).map((item) => withAuthor(ctx, item)),
     )
+    return { ...result, page }
+  },
+})
+
+// 상단 고정글 (활성). by_status_pinned_created 인덱스에서 최신순 소수만.
+export const pinned = query({
+  args: { category: v.optional(categoryValidator) },
+  handler: async (ctx, { category }) => {
+    const rows = await ctx.db
+      .query('announcements')
+      .withIndex('by_status_pinned_created', (q) =>
+        q.eq('status', 'active').eq('pinned', true),
+      )
+      .order('desc')
+      .take(PINNED_LIMIT)
+    const filtered = category ? rows.filter((r) => r.category === category) : rows
+    return await Promise.all(filtered.map((item) => withAuthor(ctx, item)))
   },
 })
 

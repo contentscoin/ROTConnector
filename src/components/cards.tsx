@@ -14,8 +14,10 @@ import {
 } from '../lib/format'
 import { cn } from '../lib/utils'
 
-// 공개 디렉토리 projection 타입 (phone 등 비공개 필드 제외)
-export type PublicMember = FunctionReturnType<typeof api.members.list>[number]
+// 공개 디렉토리 projection 타입 (phone 등 비공개 필드 제외).
+// members.list는 커서 페이지네이션이라 한 페이지(page)의 항목 타입을 쓴다.
+export type PublicMember =
+  FunctionReturnType<typeof api.members.list>['page'][number]
 
 type Author = {
   _id: Id<'members'>

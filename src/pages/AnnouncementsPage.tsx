@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { useMutation, useQuery } from 'convex/react'
+import { useMutation, usePaginatedQuery, useQuery } from 'convex/react'
 import type { FunctionReturnType } from 'convex/server'
 import { Megaphone, Pin, Plus } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
@@ -12,6 +12,7 @@ import {
   EmptyState,
   Field,
   Input,
+  LoadMore,
   PageHeader,
   Select,
   SkeletonList,
@@ -42,14 +43,32 @@ const categoryTone: Record<Category, string> = {
   bizroom: 'bg-navy-100 text-navy-600',
 }
 
+// 한 번에 받아오는 게시글 수 (커서 페이지네이션)
+const PAGE_SIZE = 20
+
 export function AnnouncementsPage() {
   const { token, member, isAdmin } = useSession()
   const [category, setCategory] = useState<Category | undefined>(undefined)
   const [showForm, setShowForm] = useState(false)
 
-  const items = useQuery(api.announcements.list, {
+  // 1000명 기준: 고정글은 별도 쿼리(소수), 일반 글은 커서 페이지네이션.
+  // 단일 인덱스로 '고정 우선 + 최신순'을 동시에 만족시킬 수 없어 분리했다.
+  const pinnedItems = useQuery(api.announcements.pinned, {
     category: category ?? undefined,
   })
+  const {
+    results: items,
+    status,
+    loadMore,
+  } = usePaginatedQuery(
+    api.announcements.list,
+    { category: category ?? undefined },
+    { initialNumItems: PAGE_SIZE },
+  )
+  const isEmpty =
+    status !== 'LoadingFirstPage' &&
+    items.length === 0 &&
+    (pinnedItems?.length ?? 0) === 0
 
   return (
     <div className="space-y-5">
@@ -90,9 +109,9 @@ export function AnnouncementsPage() {
       )}
 
       {/* List */}
-      {items === undefined ? (
+      {status === 'LoadingFirstPage' ? (
         <SkeletonList count={4} />
-      ) : items.length === 0 ? (
+      ) : isEmpty ? (
         <EmptyState
           icon={<Megaphone className="size-10" />}
           title="게시글이 없습니다"
@@ -100,16 +119,23 @@ export function AnnouncementsPage() {
         />
       ) : (
         <div className="space-y-2.5">
+          {/* 상단 고정글 */}
+          {pinnedItems?.map((item) => (
+            <AnnouncementCard key={item._id} item={item} />
+          ))}
           {items.map((item) => (
             <AnnouncementCard key={item._id} item={item} />
           ))}
         </div>
       )}
+
+      <LoadMore status={status} onLoadMore={loadMore} pageSize={PAGE_SIZE} />
     </div>
   )
 }
 
-type AnnouncementItem = FunctionReturnType<typeof api.announcements.list>[number]
+type AnnouncementItem =
+  FunctionReturnType<typeof api.announcements.list>['page'][number]
 
 function AnnouncementCard({ item }: { item: AnnouncementItem }) {
   const [expanded, setExpanded] = useState(false)

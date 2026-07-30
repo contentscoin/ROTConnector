@@ -2,6 +2,7 @@ import { v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import { contributionType } from './schema'
 import { requireAdmin } from './auth'
+import { applyContributionDelta } from './rollup'
 
 export const byMember = query({
   args: { memberId: v.id('members') },
@@ -14,25 +15,27 @@ export const byMember = query({
   },
 })
 
-// 기여 랭킹 (상위 N)
+/**
+ * 기여 랭킹 (상위 N).
+ * 1000명 기준 설계: by_status_score 인덱스는 (status, contributionScore) 순이라
+ * 활성 회원을 점수 내림차순으로 앞에서 limit명만 읽는다 — 전체 회원 정렬 불필요.
+ */
 export const leaderboard = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, { limit }) => {
-    // by_status 인덱스로 활성 회원만 조회 (전체 스캔 방지)
+    const take = Math.min(Math.max(limit ?? 10, 1), 50)
     const members = await ctx.db
       .query('members')
-      .withIndex('by_status', (q) => q.eq('status', 'active'))
-      .collect()
-    return members
-      .sort((a, b) => b.contributionScore - a.contributionScore)
-      .slice(0, limit ?? 10)
-      .map((m) => ({
-        _id: m._id,
-        name: m.name,
-        company: m.company,
-        cohort: m.cohort,
-        contributionScore: m.contributionScore,
-      }))
+      .withIndex('by_status_score', (q) => q.eq('status', 'active'))
+      .order('desc')
+      .take(take)
+    return members.map((m) => ({
+      _id: m._id,
+      name: m.name,
+      company: m.company,
+      cohort: m.cohort,
+      contributionScore: m.contributionScore,
+    }))
   },
 })
 
@@ -64,6 +67,8 @@ export const award = mutation({
         contributionScore: member.contributionScore + pts,
       })
     }
+    // 운영진 통계(누적 기여 점수·유형별 집계)를 롤업으로 유지 — 전체 스캔 제거
+    await applyContributionDelta(ctx, type, pts, 1)
     return null
   },
 })

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation, useQuery } from 'convex/react'
+import { useMutation, usePaginatedQuery, useQuery } from 'convex/react'
 import { Inbox, MessageCircle, Phone, Send, Users } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -10,6 +10,7 @@ import {
   Button,
   Card,
   EmptyState,
+  LoadMore,
   PageHeader,
   SegmentedControl,
   SkeletonList,
@@ -52,6 +53,9 @@ const segments: { value: Segment; label: string }[] = [
   { value: 'connected', label: '연결' },
 ]
 
+// 한 번에 받아오는 교류 건수 (커서 페이지네이션)
+const PAGE_SIZE = 20
+
 export function ConnectionsPage() {
   const { token } = useSession()
   const [segment, setSegment] = useState<Segment>('received')
@@ -59,7 +63,20 @@ export function ConnectionsPage() {
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [error, setError] = useState('')
 
-  const data = useQuery(api.connections.mine, token ? { token } : 'skip')
+  // 1000명 기준: 받은/보낸 탭은 서버 인덱스 + 커서 페이지네이션.
+  const inbox = usePaginatedQuery(
+    api.connections.mine,
+    token && segment !== 'connected'
+      ? { token, box: segment as 'received' | 'sent' }
+      : 'skip',
+    { initialNumItems: PAGE_SIZE },
+  )
+  // '연결' 탭은 보낸/받은 양방향을 합쳐야 해 단일 커서로 이을 수 없다.
+  // 서버가 방향별 상한까지 읽어 합쳐 주고 hasMore로 알린다(아래 안내 문구).
+  const connectedData = useQuery(
+    api.connections.connected,
+    token && segment === 'connected' ? { token } : 'skip',
+  )
   const respondMutation = useMutation(api.connections.respond)
   const cancelMutation = useMutation(api.connections.cancel)
 
@@ -116,24 +133,14 @@ export function ConnectionsPage() {
     )
   }
 
-  // accepted는 '연결' 탭에서만 노출 → 받은/보낸 탭에서는 제외
-  const received = data
-    ? data.received.filter((c: ConnectionItem) => c.status !== 'accepted')
-    : undefined
-  const sent = data
-    ? data.sent.filter((c: ConnectionItem) => c.status !== 'accepted')
-    : undefined
-  const connected = data
-    ? [...data.received, ...data.sent]
-        .filter((c: ConnectionItem) => c.status === 'accepted')
-        .sort(
-          (a: ConnectionItem, b: ConnectionItem) =>
-            (b.respondedAt ?? b.createdAt) - (a.respondedAt ?? a.createdAt),
-        )
-    : undefined
-
-  const list =
-    segment === 'received' ? received : segment === 'sent' ? sent : connected
+  const items: ConnectionItem[] =
+    segment === 'connected'
+      ? ((connectedData?.items ?? []) as ConnectionItem[])
+      : (inbox.results as ConnectionItem[])
+  const loading =
+    segment === 'connected'
+      ? connectedData === undefined
+      : inbox.status === 'LoadingFirstPage'
 
   return (
     <div className="space-y-4">
@@ -156,9 +163,9 @@ export function ConnectionsPage() {
         </p>
       )}
 
-      {list === undefined ? (
+      {loading ? (
         <SkeletonList count={4} />
-      ) : list.length === 0 ? (
+      ) : items.length === 0 ? (
         segment === 'received' ? (
           <EmptyState
             icon={<Inbox className="size-10" />}
@@ -189,7 +196,7 @@ export function ConnectionsPage() {
       ) : (
         <div className="space-y-2.5">
           {segment === 'received' &&
-            (list as ConnectionItem[]).map((c) => (
+            items.map((c) => (
               <Card key={c._id} className="space-y-3 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <PersonSummary other={c.other} />
@@ -235,7 +242,7 @@ export function ConnectionsPage() {
             ))}
 
           {segment === 'sent' &&
-            (list as ConnectionItem[]).map((c) => (
+            items.map((c) => (
               <Card key={c._id} className="space-y-3 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <PersonSummary other={c.other} />
@@ -275,7 +282,7 @@ export function ConnectionsPage() {
             ))}
 
           {segment === 'connected' &&
-            (list as ConnectionItem[]).map((c) => (
+            items.map((c) => (
               <Card key={c._id} className="space-y-3 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <PersonSummary other={c.other} />
@@ -308,6 +315,21 @@ export function ConnectionsPage() {
               </Card>
             ))}
         </div>
+      )}
+
+      {segment === 'connected' ? (
+        // '연결' 탭은 서버에서 방향별 상한까지 한 번에 받는다 (양방향 병합)
+        connectedData?.hasMore ? (
+          <p className="py-3 text-center text-xs text-navy-400">
+            최근 연결 {items.length}건까지 표시합니다.
+          </p>
+        ) : null
+      ) : (
+        <LoadMore
+          status={inbox.status}
+          onLoadMore={inbox.loadMore}
+          pageSize={PAGE_SIZE}
+        />
       )}
     </div>
   )

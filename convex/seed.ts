@@ -1,4 +1,5 @@
 import { internalMutation } from './_generated/server'
+import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 
 const DAY = 24 * 60 * 60 * 1000
@@ -435,6 +436,13 @@ export const run = internalMutation({
       host: '알비연 사무국',
       status: 'upcoming',
       createdAt: now - 3 * DAY,
+    })
+
+    // 검색 인덱스(searchText)·집계 롤업(counters/facetCounts)·회원 파생 캐시는
+    // 시드에서 손으로 채우지 않고 재계산 마이그레이션에 위임한다 —
+    // 백필 로직이 한 곳(migrations.rebuildRollups)에만 있도록.
+    await ctx.scheduler.runAfter(0, internal.migrations.rebuildRollups, {
+      confirm: 'REBUILD' as const,
     })
 
     return {

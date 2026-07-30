@@ -5,6 +5,11 @@ import type { Doc, Id } from './_generated/dataModel'
 import { matchStatus, contributionType } from './schema'
 import { requireAdmin } from './auth'
 import { createNotification } from './notify'
+import {
+  applyContributionDelta,
+  applyMatchDelta,
+  applyRequestDelta,
+} from './rollup'
 
 // 알림 제목용 요청 제목 축약 (긴 제목이 알림을 망치지 않도록)
 function shortTitle(title: string): string {
@@ -37,29 +42,26 @@ async function award(
       contributionScore: member.contributionScore + points,
     })
   }
+  // 운영진 통계용 기여 롤업 (전체 contributions 스캔 제거)
+  await applyContributionDelta(ctx, type, points, 1)
 }
 
 // 특정 매칭에 적립된 기여를 역적립(롤백). remove(done 매칭) 시 점수 고립 방지.
+// by_ref 인덱스로 해당 매칭의 기여만 읽는다 — 회원의 기여 전체를 훑지 않는다.
 async function rollbackMatchContributions(ctx: MutationCtx, match: Doc<'matches'>) {
-  const memberIds = [match.helperId, match.brokeredBy].filter(
-    (id): id is Id<'members'> => !!id,
-  )
-  for (const mid of memberIds) {
-    const contribs = await ctx.db
-      .query('contributions')
-      .withIndex('by_member', (q) => q.eq('memberId', mid))
-      .collect()
-    for (const c of contribs) {
-      if (c.refId === (match._id as string)) {
-        await ctx.db.delete(c._id)
-        const member = await ctx.db.get(mid)
-        if (member) {
-          await ctx.db.patch(mid, {
-            contributionScore: Math.max(0, member.contributionScore - c.points),
-          })
-        }
-      }
+  const contribs = await ctx.db
+    .query('contributions')
+    .withIndex('by_ref', (q) => q.eq('refId', match._id as string))
+    .collect()
+  for (const c of contribs) {
+    await ctx.db.delete(c._id)
+    const member = await ctx.db.get(c.memberId)
+    if (member) {
+      await ctx.db.patch(c.memberId, {
+        contributionScore: Math.max(0, member.contributionScore - c.points),
+      })
     }
+    await applyContributionDelta(ctx, c.type, -c.points, -1)
   }
 }
 
@@ -78,7 +80,12 @@ async function recomputeRequestStatus(
   if (matches.some((m) => m.status === 'done')) next = 'connected'
   else if (matches.length > 0) next = 'matching'
   else next = 'open'
-  if (next !== req.status) await ctx.db.patch(requestId, { status: next })
+  if (next !== req.status) {
+    await ctx.db.patch(requestId, { status: next })
+    const after = await ctx.db.get(requestId)
+    // 요청 상태별 카운터 유지 (운영진 퍼널 집계를 O(1)로)
+    if (after) await applyRequestDelta(ctx, req, after)
+  }
 }
 
 // 특정 요청의 매칭 목록 (helper/broker 요약 포함)
@@ -128,12 +135,15 @@ export const propose = mutation({
     if (!helper || helper.status !== 'active') {
       throw new Error('유효한 활성 회원만 연결할 수 있습니다.')
     }
-    // 동일 (요청, helper) 중복 매칭 차단 → 중복 기여 적립 방지
-    const existingMatches = await ctx.db
+    // 동일 (요청, helper) 중복 매칭 차단 → 중복 기여 적립 방지.
+    // by_request_helper 복합 인덱스 단건 조회 (요청의 매칭 전체를 훑지 않는다)
+    const duplicate = await ctx.db
       .query('matches')
-      .withIndex('by_request', (q) => q.eq('requestId', requestId))
-      .collect()
-    if (existingMatches.some((m) => m.helperId === helperId)) {
+      .withIndex('by_request_helper', (q) =>
+        q.eq('requestId', requestId).eq('helperId', helperId),
+      )
+      .first()
+    if (duplicate) {
       throw new Error('이미 이 요청에 연결된 회원입니다.')
     }
     const matchId = await ctx.db.insert('matches', {
@@ -180,6 +190,8 @@ export const setStatus = mutation({
       throw new Error("'완료' 처리는 완료 버튼으로, 취소는 삭제로만 가능합니다.")
     }
     await ctx.db.patch(matchId, { status })
+    const after = await ctx.db.get(matchId)
+    if (after) await applyMatchDelta(ctx, match, after)
     return null
   },
 })
@@ -206,6 +218,9 @@ export const complete = mutation({
       throw new Error('종료된 요청입니다. 먼저 요청을 다시 여세요.')
     }
     await ctx.db.patch(args.matchId, { status: 'done' })
+    const doneMatch = await ctx.db.get(args.matchId)
+    // 완료 매칭 카운터 (+1) — 운영진 '중개 연결' 수치를 O(1)로
+    if (doneMatch) await applyMatchDelta(ctx, match, doneMatch)
 
     const helperPoints = args.helperPoints ?? 10
     await award(
@@ -260,6 +275,7 @@ export const remove = mutation({
       await rollbackMatchContributions(ctx, match)
     }
     await ctx.db.delete(matchId)
+    await applyMatchDelta(ctx, match, null)
     // 남은 매칭으로 요청 상태 재계산 (0건이면 open으로 환원)
     await recomputeRequestStatus(ctx, match.requestId)
     return null

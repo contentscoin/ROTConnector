@@ -1,9 +1,23 @@
 import { v } from 'convex/values'
+import { paginationOptsValidator } from 'convex/server'
 import { mutation, query } from './_generated/server'
-import type { QueryCtx } from './_generated/server'
-import type { Doc } from './_generated/dataModel'
+import type { MutationCtx, QueryCtx } from './_generated/server'
+import type { Doc, Id } from './_generated/dataModel'
 import { memberFromToken, requireMember, requireAdmin } from './auth'
-import { normalizeCohort, normalizeTags, termsOverlap } from './util'
+import {
+  buildMemberSearchText,
+  memberProfileScore,
+  normalizeCohort,
+  normalizeTags,
+  termsOverlap,
+} from './util'
+import {
+  COUNTER,
+  applyMemberDelta,
+  facetCount,
+  readCounter,
+  topFacets,
+} from './rollup'
 import { recordAudit } from './audit'
 import { createNotification } from './notify'
 
@@ -16,7 +30,8 @@ const linkValidator = v.object({ label: v.string(), url: v.string() })
 /**
  * 공개 디렉토리용 projection.
  * phone(=로그인 자격증명)은 절대 공개 응답에 포함하지 않는다.
- * 전체 PII(phone)는 본인(auth.me) 또는 운영진(admin.dashboard) 경로에서만 노출.
+ * searchText/profileScore 등 내부 비정규화 필드도 노출하지 않는다.
+ * 전체 PII(phone)는 본인(auth.me) 또는 운영진(admin.*) 경로에서만 노출.
  */
 function toPublicMember(m: Doc<'members'>) {
   return {
@@ -53,6 +68,13 @@ const MAX = {
   url: 500,
 }
 
+// 추천 후보 풀 크기 — 전체 회원 스캔 대신 검색·인덱스로 이만큼만 읽고 점수화한다.
+const CANDIDATE_POOL = 60
+// 인덱스 기반 보조 후보(동기·동문·같은 지역) 상한
+const CANDIDATE_PEERS = 20
+// 운영진 선택 UI(기여 적립·헬퍼 지정)용 후보 상한
+const PICKER_LIMIT = 50
+
 // 링크 URL 스킴 화이트리스트 (javascript: 등 저장형 XSS 차단)
 function assertSafeLinks(links: { label: string; url: string }[]) {
   if (links.length > MAX.links) throw new Error('링크는 최대 12개까지 가능합니다.')
@@ -67,106 +89,118 @@ function assertSafeLinks(links: { label: string; url: string }[]) {
   }
 }
 
-// 활성 회원만 인덱스로 조회 (전체 스캔 방지). 디렉토리·추천·통계의 공통 진입점.
-async function activeMembers(ctx: QueryCtx) {
-  return await ctx.db
-    .query('members')
-    .withIndex('by_status', (q) => q.eq('status', 'active'))
-    .collect()
-}
-
-// 회원 디렉토리 (검색·필터).
-// 지역/기수/학교는 status 선행 복합 인덱스로 서버에서 좁히고,
-// 배열 필드(업종·도움분야)와 자유 텍스트만 좁혀진 결과에서 처리한다.
-// phone 등 비공개 필드는 toPublicMember projection으로 제거해 반환.
+/**
+ * 회원 디렉토리 (검색·필터) — 커서 페이지네이션.
+ *
+ * 1000명 기준 설계: 한 번에 읽는 문서 수를 요청 페이지 크기로 고정한다.
+ *  - q(자유 텍스트): searchIndex `search_text` + filterFields(status/region/cohort/university)
+ *  - 업종/도움분야(배열 필드): Convex 인덱스로 원소 조회가 불가하므로 태그를
+ *    searchText에 포함시켜 검색으로 후보를 좁히고, 정확 일치는 페이지 안에서 확정
+ *  - 지역/기수/학교: status 선행 복합 인덱스 (정렬 키 contributionScore 포함)
+ *  - 무필터: by_status_score — 기여 점수 desc 정렬을 인덱스가 보장
+ * 여러 필터가 겹치면 가장 선별력이 높은 축 하나를 인덱스/검색으로 쓰고 나머지는
+ * 페이지 내에서 걸러낸다(페이지가 부분적으로 비어도 loadMore로 이어진다).
+ * phone 등 비공개 필드는 toPublicMember projection으로 제거해 반환.
+ */
 export const list = query({
   args: {
-    token: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
     q: v.optional(v.string()),
     industry: v.optional(v.string()),
     region: v.optional(v.string()),
     helpOffer: v.optional(v.string()),
     cohort: v.optional(v.string()),
     university: v.optional(v.string()),
-    includePending: v.optional(v.boolean()),
   },
-  handler: async (
-    ctx,
-    { token, q, industry, region, helpOffer, cohort, university, includePending },
-  ) => {
-    // pending(미승인) 회원 노출은 운영진 전용 — 비인증 우회 차단
-    if (includePending) await requireAdmin(ctx, token)
-    // 정확 일치 필터 하나를 인덱스 prefix로 사용 (region > cohort > university 순).
-    // 저장 시 normalizeCohort로 정규화된 값 기준이라 facets 값과 정합.
-    let members: Doc<'members'>[]
-    if (includePending) {
-      members = await ctx.db.query('members').collect()
+  handler: async (ctx, args) => {
+    const { paginationOpts, industry, region, helpOffer, cohort, university } =
+      args
+    const needle = args.q?.trim()
+    // 자유 텍스트가 없어도 태그 필터가 있으면 태그를 검색어로 사용
+    const searchTerm = needle || industry || helpOffer || undefined
+
+    let result
+    if (searchTerm) {
+      result = await ctx.db
+        .query('members')
+        .withSearchIndex('search_text', (s) => {
+          let b = s.search('searchText', searchTerm).eq('status', 'active')
+          if (region) b = b.eq('region', region)
+          if (cohort) b = b.eq('cohort', cohort)
+          if (university) b = b.eq('university', university)
+          return b
+        })
+        .paginate(paginationOpts)
     } else if (region) {
-      members = await ctx.db
+      result = await ctx.db
         .query('members')
         .withIndex('by_status_region', (q) =>
           q.eq('status', 'active').eq('region', region),
         )
-        .collect()
+        .order('desc')
+        .paginate(paginationOpts)
     } else if (cohort) {
-      members = await ctx.db
+      result = await ctx.db
         .query('members')
         .withIndex('by_status_cohort', (q) =>
           q.eq('status', 'active').eq('cohort', cohort),
         )
-        .collect()
+        .order('desc')
+        .paginate(paginationOpts)
     } else if (university) {
-      members = await ctx.db
+      result = await ctx.db
         .query('members')
         .withIndex('by_status_university', (q) =>
           q.eq('status', 'active').eq('university', university),
         )
-        .collect()
+        .order('desc')
+        .paginate(paginationOpts)
     } else {
-      members = await activeMembers(ctx)
+      result = await ctx.db
+        .query('members')
+        .withIndex('by_status_score', (q) => q.eq('status', 'active'))
+        .order('desc')
+        .paginate(paginationOpts)
     }
-    if (industry) {
-      members = members.filter((m) => m.industry.includes(industry))
+
+    // 인덱스/검색으로 좁히지 못한 나머지 조건은 페이지 안에서 확정
+    let page = result.page
+    if (industry) page = page.filter((m) => m.industry.includes(industry))
+    if (helpOffer) page = page.filter((m) => m.helpOffer.includes(helpOffer))
+    if (searchTerm) {
+      if (region) page = page.filter((m) => m.region === region)
+      if (cohort) page = page.filter((m) => m.cohort === cohort)
+      if (university) page = page.filter((m) => m.university === university)
     }
-    // 아래 정확 일치 필터는 위에서 인덱스 prefix로 이미 적용된 경우 no-op이고,
-    // 그 외 조합(예: region+cohort 동시 지정, includePending)에서 나머지를 걸러낸다.
-    if (region) {
-      members = members.filter((m) => m.region === region)
-    }
-    if (cohort) {
-      members = members.filter((m) => m.cohort === cohort)
-    }
-    if (university) {
-      members = members.filter((m) => m.university === university)
-    }
-    if (helpOffer) {
-      members = members.filter((m) => m.helpOffer.includes(helpOffer))
-    }
-    if (q && q.trim()) {
-      const needle = q.trim().toLowerCase()
-      members = members.filter((m) =>
-        [
-          m.name,
-          m.company ?? '',
-          m.title ?? '',
-          m.intro ?? '',
-          m.cohort ?? '',
-          ...m.industry,
-          ...m.helpOffer,
-          ...m.helpNeed,
-        ]
-          .join(' ')
-          .toLowerCase()
-          .includes(needle),
-      )
-    }
-    return members
-      .sort(
-        (a, b) =>
-          b.contributionScore - a.contributionScore ||
-          a.name.localeCompare(b.name, 'ko'),
-      )
-      .map(toPublicMember)
+    return { ...result, page: page.map(toPublicMember) }
+  },
+})
+
+// 운영진 선택 UI(기여 적립 대상·헬퍼 지정)용 경량 후보 목록.
+// 1000명 전체를 <Select>에 담지 않도록 검색어 기반 상위 50명만 반환.
+export const picker = query({
+  args: { token: v.string(), q: v.optional(v.string()) },
+  handler: async (ctx, { token, q }) => {
+    await requireAdmin(ctx, token)
+    const needle = q?.trim()
+    const rows = needle
+      ? await ctx.db
+          .query('members')
+          .withSearchIndex('search_text', (s) =>
+            s.search('searchText', needle).eq('status', 'active'),
+          )
+          .take(PICKER_LIMIT)
+      : await ctx.db
+          .query('members')
+          .withIndex('by_status_score', (qq) => qq.eq('status', 'active'))
+          .order('desc')
+          .take(PICKER_LIMIT)
+    return rows.map((m) => ({
+      _id: m._id,
+      name: m.name,
+      company: m.company,
+      cohort: m.cohort,
+    }))
   },
 })
 
@@ -180,70 +214,130 @@ export const get = query({
   },
 })
 
-// 필터용 메타: 업종/지역/도움분야 distinct
+// 필터용 메타: 업종/지역/도움분야/기수/학교 distinct.
+// facetCounts 롤업에서 상위 N개만 읽으므로 회원 수와 무관하게 비용이 고정.
+const FACET_LIMIT = {
+  industry: 40,
+  region: 30,
+  cohort: 60,
+  university: 40,
+  helpOffer: 12, // 칩으로 노출하는 빈도 상위 도움분야
+}
+
 export const facets = query({
   args: {},
   handler: async (ctx) => {
-    const members = await activeMembers(ctx)
-    const industries = new Set<string>()
-    const regions = new Set<string>()
-    const cohorts = new Set<string>()
-    const universities = new Set<string>()
-    const helpCount = new Map<string, number>()
-    for (const m of members) {
-      m.industry.forEach((i) => industries.add(i))
-      if (m.region) regions.add(m.region)
-      // 필터 칩은 정규화된 숫자 기수만 노출 (자유 표기 주입 방지)
-      if (m.cohort && /^\d{1,3}$/.test(m.cohort)) cohorts.add(m.cohort)
-      if (m.university) universities.add(m.university)
-      m.helpOffer.forEach((h) => helpCount.set(h, (helpCount.get(h) ?? 0) + 1))
-    }
-    // 도움분야는 빈도 상위 12개만 칩으로 노출
-    const helpOffers = [...helpCount.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko'))
-      .slice(0, 12)
-      .map(([h]) => h)
+    const [industries, regions, cohorts, universities, helpOffers, total] =
+      await Promise.all([
+        topFacets(ctx, 'industry', FACET_LIMIT.industry),
+        topFacets(ctx, 'region', FACET_LIMIT.region),
+        topFacets(ctx, 'cohort', FACET_LIMIT.cohort),
+        topFacets(ctx, 'university', FACET_LIMIT.university),
+        topFacets(ctx, 'helpOffer', FACET_LIMIT.helpOffer),
+        readCounter(ctx, COUNTER.membersActive),
+      ])
+    const byName = (a: { key: string }, b: { key: string }) =>
+      a.key.localeCompare(b.key, 'ko')
     return {
-      industries: [...industries].sort((a, b) => a.localeCompare(b, 'ko')),
-      regions: [...regions].sort((a, b) => a.localeCompare(b, 'ko')),
-      // 기수는 숫자 내림차순(최신 기수 우선), 비숫자 표기는 뒤로
-      cohorts: [...cohorts].sort((a, b) => {
-        const na = Number(a)
-        const nb = Number(b)
-        if (Number.isFinite(na) && Number.isFinite(nb)) return nb - na
-        if (Number.isFinite(na)) return -1
-        if (Number.isFinite(nb)) return 1
-        return a.localeCompare(b, 'ko')
-      }),
-      universities: [...universities].sort((a, b) => a.localeCompare(b, 'ko')),
-      helpOffers,
-      total: members.length,
+      industries: industries.map((f) => f.key).sort((a, b) => a.localeCompare(b, 'ko')),
+      regions: regions.map((f) => f.key).sort((a, b) => a.localeCompare(b, 'ko')),
+      // 필터 칩은 정규화된 숫자 기수만 노출 (자유 표기 주입 방지), 최신 기수 우선
+      cohorts: cohorts
+        .filter((f) => /^\d{1,3}$/.test(f.key))
+        .sort((a, b) => Number(b.key) - Number(a.key))
+        .map((f) => f.key),
+      universities: universities.sort(byName).map((f) => f.key),
+      // 도움분야는 빈도 상위 12개만 (topFacets가 이미 빈도 desc)
+      helpOffers: helpOffers.map((f) => f.key),
+      total,
     }
   },
 })
 
-// 입력 자동완성용 태그 풀 (업종/도움 분야). 빈도순으로 인기 캐논 태그를 노출해 파편화 완화.
+// 입력 자동완성용 태그 풀 (업종/도움 분야). 빈도순 상위를 노출해 파편화 완화.
 export const tagPool = query({
   args: {},
   handler: async (ctx) => {
-    const members = await activeMembers(ctx)
-    const industries = new Map<string, number>()
-    const helps = new Map<string, number>()
-    const bump = (mp: Map<string, number>, k: string) =>
-      mp.set(k, (mp.get(k) ?? 0) + 1)
-    for (const m of members) {
-      m.industry.forEach((i) => bump(industries, i))
-      m.helpOffer.forEach((h) => bump(helps, h))
-      m.helpNeed.forEach((h) => bump(helps, h))
+    const [industries, offers, needs] = await Promise.all([
+      topFacets(ctx, 'industry', 40),
+      topFacets(ctx, 'helpOffer', 40),
+      topFacets(ctx, 'helpNeed', 40),
+    ])
+    // 줄 수 있는 도움/필요한 도움은 같은 어휘 풀을 공유 — 빈도 합산 후 상위 40개
+    const merged = new Map<string, number>()
+    for (const f of [...offers, ...needs]) {
+      merged.set(f.key, (merged.get(f.key) ?? 0) + f.count)
     }
-    const top = (mp: Map<string, number>) =>
-      [...mp.entries()]
+    return {
+      industries: industries.map((f) => f.key),
+      helps: [...merged.entries()]
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko'))
         .slice(0, 40)
-        .map(([t]) => t)
-    return { industries: top(industries), helps: top(helps) }
+        .map(([t]) => t),
+    }
   },
 })
+
+// 추천 후보 수집 — 전체 활성 회원 스캔 대신 검색 인덱스 + 인덱스 take(N)로 제한.
+async function candidatePool(
+  ctx: QueryCtx,
+  terms: string[],
+  peers: { region?: string; cohort?: string; university?: string },
+): Promise<Doc<'members'>[]> {
+  const pool = new Map<string, Doc<'members'>>()
+  const add = (rows: Doc<'members'>[]) => {
+    for (const m of rows) pool.set(m._id as string, m)
+  }
+  const query = terms
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .join(' ')
+  if (query) {
+    add(
+      await ctx.db
+        .query('members')
+        .withSearchIndex('search_text', (s) =>
+          s.search('searchText', query).eq('status', 'active'),
+        )
+        .take(CANDIDATE_POOL),
+    )
+  }
+  const { region, cohort, university } = peers
+  if (region) {
+    add(
+      await ctx.db
+        .query('members')
+        .withIndex('by_status_region', (q) =>
+          q.eq('status', 'active').eq('region', region),
+        )
+        .order('desc')
+        .take(CANDIDATE_PEERS),
+    )
+  }
+  if (cohort) {
+    add(
+      await ctx.db
+        .query('members')
+        .withIndex('by_status_cohort', (q) =>
+          q.eq('status', 'active').eq('cohort', cohort),
+        )
+        .order('desc')
+        .take(CANDIDATE_PEERS),
+    )
+  }
+  if (university) {
+    add(
+      await ctx.db
+        .query('members')
+        .withIndex('by_status_university', (q) =>
+          q.eq('status', 'active').eq('university', university),
+        )
+        .order('desc')
+        .take(CANDIDATE_PEERS),
+    )
+  }
+  return [...pool.values()]
+}
 
 // 요청에 적합한 추천 helper (운영진 매칭 보조). category/tags/region ↔ helpOffer/industry/region 점수화.
 export const recommendForRequest = query({
@@ -265,7 +359,7 @@ export const recommendForRequest = query({
       ...matches.map((m) => m.helperId as string),
     ])
     const reqTerms = [req.category, ...req.tags]
-    const members = await activeMembers(ctx)
+    const members = await candidatePool(ctx, reqTerms, { region: req.region })
     return members
       .filter((m) => !excluded.has(m._id as string))
       .map((m) => {
@@ -296,7 +390,11 @@ export const recommendForMember = query({
     if (myTerms.length === 0 && !me.region && !me.cohort && !me.university) {
       return []
     }
-    const members = await activeMembers(ctx)
+    const members = await candidatePool(ctx, myTerms, {
+      region: me.region,
+      cohort: me.cohort,
+      university: me.university,
+    })
     return members
       .filter((m) => m._id !== me._id)
       .map((m) => {
@@ -328,26 +426,33 @@ export const recommendForMember = query({
   },
 })
 
-// 내 활동 통계 (프로필 페이지용). 기존 테이블에서 집계.
+// 내 활동 통계 (프로필 페이지용). 모두 본인 소유 레코드라 회원 수와 무관하게 비용이 고정.
 export const myStats = query({
   args: { token: v.optional(v.string()) },
   handler: async (ctx, { token }) => {
     const me = await memberFromToken(ctx, token)
     if (!me) return null
 
-    // 교류: accepted 건수
-    const connectionsFrom = await ctx.db
-      .query('connections')
-      .withIndex('by_from', (q) => q.eq('fromId', me._id))
-      .collect()
-    const connectionsTo = await ctx.db
-      .query('connections')
-      .withIndex('by_to', (q) => q.eq('toId', me._id))
-      .collect()
-    const acceptedConnections = [
-      ...connectionsFrom.filter((c) => c.status === 'accepted'),
-      ...connectionsTo.filter((c) => c.status === 'accepted'),
-    ].length
+    // 교류: accepted 건수 — 회원 문서의 캐시 사용.
+    // 백필 전(undefined) 회원은 방향별 status 인덱스로 즉시 계산.
+    let acceptedConnections = me.acceptedConnections
+    if (acceptedConnections === undefined) {
+      const [from, to] = await Promise.all([
+        ctx.db
+          .query('connections')
+          .withIndex('by_from_status', (q) =>
+            q.eq('fromId', me._id).eq('status', 'accepted'),
+          )
+          .collect(),
+        ctx.db
+          .query('connections')
+          .withIndex('by_to_status', (q) =>
+            q.eq('toId', me._id).eq('status', 'accepted'),
+          )
+          .collect(),
+      ])
+      acceptedConnections = from.length + to.length
+    }
 
     // 내 도움요청 수
     const myRequests = await ctx.db
@@ -384,23 +489,24 @@ export const myStats = query({
   },
 })
 
-// 동기·동문 수 (본인 제외 active). 홈/프로필의 "내 동기 N명" 진입점용.
+// 동기·동문 수 (본인 제외 active). facetCounts 롤업에서 값별 빈도를 바로 읽는다.
 export const peerCounts = query({
   args: { token: v.optional(v.string()) },
   handler: async (ctx, { token }) => {
     const me = await memberFromToken(ctx, token)
     if (!me) return null
-    const members = await activeMembers(ctx)
-    const peers = members.filter((m) => m._id !== me._id)
+    const self = me.status === 'active' ? 1 : 0 // 본인 제외
+    const [cohortCount, universityCount] = await Promise.all([
+      me.cohort ? facetCount(ctx, 'cohort', me.cohort) : Promise.resolve(0),
+      me.university
+        ? facetCount(ctx, 'university', me.university)
+        : Promise.resolve(0),
+    ])
     return {
       cohort: me.cohort,
-      cohortCount: me.cohort
-        ? peers.filter((m) => m.cohort === me.cohort).length
-        : 0,
+      cohortCount: me.cohort ? Math.max(0, cohortCount - self) : 0,
       university: me.university,
-      universityCount: me.university
-        ? peers.filter((m) => m.university === me.university).length
-        : 0,
+      universityCount: me.university ? Math.max(0, universityCount - self) : 0,
     }
   },
 })
@@ -457,7 +563,7 @@ export const create = mutation({
         throw new Error('태그 개수/길이가 한도를 초과했습니다.')
       }
     }
-    return await ctx.db.insert('members', {
+    const doc = {
       name,
       phone,
       cohort: normalizeCohort(args.cohort), // "37기" → "37"
@@ -473,10 +579,21 @@ export const create = mutation({
       helpNeed,
       links: [],
       isAdmin: args.isAdmin ?? false,
-      status: 'active',
+      status: 'active' as const,
       contributionScore: 0,
       createdAt: Date.now(),
+    }
+    const memberId = await ctx.db.insert('members', {
+      ...doc,
+      // 검색 인덱스·집계용 비정규화 필드 (rollup과 함께 항상 같이 갱신)
+      searchText: buildMemberSearchText(doc),
+      profileScore: memberProfileScore(doc),
+      acceptedConnections: 0,
+      unreadNotifications: 0,
     })
+    const created = await ctx.db.get(memberId)
+    if (created) await applyMemberDelta(ctx, null, created)
+    return memberId
   },
 })
 
@@ -553,10 +670,28 @@ export const update = mutation({
     const clean = Object.fromEntries(
       Object.entries(patch).filter(([, val]) => val !== undefined),
     )
+    const before = await ctx.db.get(targetId)
+    if (!before) throw new Error('회원을 찾을 수 없습니다.')
     await ctx.db.patch(targetId, clean)
+    await refreshMemberDerived(ctx, targetId)
+    const after = await ctx.db.get(targetId)
+    if (after) await applyMemberDelta(ctx, before, after)
     return null
   },
 })
+
+// 프로필 필드 변경 후 검색 텍스트·완성률 캐시를 최종 문서 기준으로 재계산.
+async function refreshMemberDerived(
+  ctx: MutationCtx,
+  memberId: Id<'members'>,
+): Promise<void> {
+  const m = await ctx.db.get(memberId)
+  if (!m) return
+  await ctx.db.patch(memberId, {
+    searchText: buildMemberSearchText(m),
+    profileScore: memberProfileScore(m),
+  })
+}
 
 // 운영진: pending 회원 승인
 export const approve = mutation({
@@ -567,6 +702,8 @@ export const approve = mutation({
     if (!target) throw new Error('회원을 찾을 수 없습니다.')
     const wasInactive = target.status !== 'active'
     await ctx.db.patch(memberId, { status: 'active' })
+    const after = await ctx.db.get(memberId)
+    if (after) await applyMemberDelta(ctx, target, after)
     await recordAudit(ctx, me, 'member.approve', target)
     // 신규 승인일 때만 본인에게 알림 (이미 active면 중복 알림 방지)
     if (wasInactive) {
@@ -602,6 +739,9 @@ export const setStatus = mutation({
     if (!target) throw new Error('회원을 찾을 수 없습니다.')
     if (target.status === status) return null // 변경 없음 — 로그 미기록
     await ctx.db.patch(memberId, { status })
+    // 상태 전이는 활성 회원 기준 집계(facets/평균 완성률)를 바꾸므로 롤업 반영
+    const after = await ctx.db.get(memberId)
+    if (after) await applyMemberDelta(ctx, target, after)
     // suspended 전환 시 기존 세션은 memberFromToken에서 자동 무효화되어 별도 삭제 불필요
     const action =
       status === 'active'

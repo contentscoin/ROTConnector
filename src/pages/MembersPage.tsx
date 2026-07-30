@@ -1,13 +1,23 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { useQuery } from 'convex/react'
+import { usePaginatedQuery, useQuery } from 'convex/react'
 import { Search, X, Users, UserRoundPen, ChevronRight } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
-import { Chip, EmptyState, Input, PageHeader, SkeletonList } from '../components/ui'
+import {
+  Chip,
+  EmptyState,
+  Input,
+  LoadMore,
+  PageHeader,
+  SkeletonList,
+} from '../components/ui'
 import { MemberCard } from '../components/cards'
 import { formatCohort } from '../lib/format'
 import { useSession } from '../lib/session'
 import { useDebounce } from '../lib/useDebounce'
+
+// 한 번에 받아오는 회원 수. 1000명 규모에서도 첫 화면 응답을 일정하게 유지한다.
+const PAGE_SIZE = 20
 
 export function MembersPage() {
   const { member } = useSession()
@@ -33,14 +43,25 @@ export function MembersPage() {
   const debouncedQ = useDebounce(q, 300)
 
   const facets = useQuery(api.members.facets, {})
-  const members = useQuery(api.members.list, {
-    q: debouncedQ || undefined,
-    cohort: cohort || undefined,
-    university: university || undefined,
-    industry: industry || undefined,
-    region: region || undefined,
-    helpOffer: helpOffer || undefined,
-  })
+  // 1000명 기준: 디렉토리는 커서 페이지네이션으로 PAGE_SIZE명씩 받는다.
+  // 검색어·필터가 바뀌면 인자가 바뀌어 usePaginatedQuery가 첫 페이지부터 다시 받는다
+  // (300ms 디바운스는 그대로 유지 — 타이핑 중 매 글자마다 새 페이지를 받지 않는다).
+  const {
+    results: members,
+    status,
+    loadMore,
+  } = usePaginatedQuery(
+    api.members.list,
+    {
+      q: debouncedQ || undefined,
+      cohort: cohort || undefined,
+      university: university || undefined,
+      industry: industry || undefined,
+      region: region || undefined,
+      helpOffer: helpOffer || undefined,
+    },
+    { initialNumItems: PAGE_SIZE },
+  )
 
   return (
     <div className="space-y-4">
@@ -211,7 +232,7 @@ export function MembersPage() {
       )}
 
       {/* 목록 */}
-      {members === undefined ? (
+      {status === 'LoadingFirstPage' ? (
         <SkeletonList count={6} />
       ) : members.length === 0 ? (
         <EmptyState
@@ -226,6 +247,7 @@ export function MembersPage() {
           ))}
         </div>
       )}
+      <LoadMore status={status} onLoadMore={loadMore} pageSize={PAGE_SIZE} />
     </div>
   )
 }

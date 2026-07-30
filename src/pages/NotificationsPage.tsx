@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery } from 'convex/react'
+import { useMutation, usePaginatedQuery } from 'convex/react'
 import {
   Bell,
   ArrowLeftRight,
@@ -20,6 +20,7 @@ import {
   Button,
   Card,
   EmptyState,
+  LoadMore,
   PageHeader,
   SkeletonList,
 } from '../components/ui'
@@ -77,22 +78,30 @@ type NotificationRow = {
   createdAt: number
 }
 
+// 한 번에 받아오는 알림 수 (커서 페이지네이션)
+const PAGE_SIZE = 25
+
 export function NotificationsPage() {
   const { token } = useSession()
   const navigate = useNavigate()
-  const rows = useQuery(
+  // 1000명 기준: 알림은 활동에 따라 무한히 누적되므로 고정 take가 아니라 커서로 이어 받는다.
+  const {
+    results: rows,
+    status,
+    loadMore,
+  } = usePaginatedQuery(
     api.notifications.list,
     token ? { token } : 'skip',
-  ) as NotificationRow[] | undefined
+    { initialNumItems: PAGE_SIZE },
+  )
   const markRead = useMutation(api.notifications.markRead)
   const markAllRead = useMutation(api.notifications.markAllRead)
   const registerPush = useMutation(api.push.register)
 
-  const hasUnread = (rows ?? []).some((n) => !n.read)
+  const hasUnread = rows.some((n) => !n.read)
 
   // Group notifications by date
   const grouped = useMemo(() => {
-    if (!rows) return null
     const groups: { label: string; items: NotificationRow[] }[] = []
     for (const n of rows) {
       const label = dateGroupLabel(n.createdAt)
@@ -183,7 +192,7 @@ export function NotificationsPage() {
         </Card>
       )}
 
-      {rows === undefined ? (
+      {status === 'LoadingFirstPage' ? (
         <SkeletonList count={5} />
       ) : rows.length === 0 ? (
         <EmptyState
@@ -198,7 +207,7 @@ export function NotificationsPage() {
             <RefreshCw className="size-3" />
             <span>아래로 당겨 새로고침</span>
           </div>
-          {grouped!.map((group) => (
+          {grouped.map((group) => (
             <div key={group.label} className="space-y-2.5">
               <p className="px-1 text-xs font-bold text-navy-400 uppercase tracking-wide">
                 {group.label}
@@ -252,6 +261,8 @@ export function NotificationsPage() {
           ))}
         </div>
       )}
+
+      <LoadMore status={status} onLoadMore={loadMore} pageSize={PAGE_SIZE} />
     </div>
   )
 }
