@@ -13,6 +13,7 @@ import {
 } from '../components/ui'
 import { RequestCard } from '../components/cards'
 import { useSession } from '../lib/session'
+import { useDebounce } from '../lib/useDebounce'
 
 type StatusFilter = 'all' | 'open' | 'matching' | 'connected' | 'closed'
 
@@ -48,10 +49,12 @@ export function RequestsPage() {
   const [mineOnly, setMineOnly] = useState(false)
   const [sort, setSort] = useState<'recent' | 'urgent'>('recent')
 
+  const debouncedQ = useDebounce(q, 300)
+
   const requests = useQuery(api.requests.list, {
     status: status === 'all' ? undefined : status,
     category: category || undefined,
-    q: q || undefined,
+    q: debouncedQ || undefined,
   })
 
   // list는 createdAt desc 고정 → mine 필터 + 긴급도 정렬만 클라이언트에서.

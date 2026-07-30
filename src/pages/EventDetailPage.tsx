@@ -22,6 +22,7 @@ import {
   LoadingScreen,
   SectionHeader,
   ShareButton,
+  useToast,
 } from '../components/ui'
 import { formatCohort, formatDate } from '../lib/format'
 import { errorMessage } from '../lib/utils'
@@ -45,6 +46,7 @@ export function EventDetailPage() {
   const rsvpEvent = useMutation(api.events.rsvp)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
 
   if (event === undefined) return <LoadingScreen />
   if (event === null)
@@ -72,6 +74,9 @@ export function EventDetailPage() {
         eventId,
         status: event.myRsvp === next ? 'none' : next,
       })
+      if (event.myRsvp !== next) {
+        toast(next === 'going' ? '참석으로 등록했습니다.' : '관심으로 등록했습니다.')
+      }
     } catch (err) {
       setError(errorMessage(err))
     } finally {

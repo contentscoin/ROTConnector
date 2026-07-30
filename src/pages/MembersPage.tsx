@@ -7,6 +7,7 @@ import { Chip, EmptyState, Input, PageHeader, SkeletonList } from '../components
 import { MemberCard } from '../components/cards'
 import { formatCohort } from '../lib/format'
 import { useSession } from '../lib/session'
+import { useDebounce } from '../lib/useDebounce'
 
 export function MembersPage() {
   const { member } = useSession()
@@ -29,9 +30,11 @@ export function MembersPage() {
   const [region, setRegion] = useState<string | null>(null)
   const [helpOffer, setHelpOffer] = useState<string | null>(null)
 
+  const debouncedQ = useDebounce(q, 300)
+
   const facets = useQuery(api.members.facets, {})
   const members = useQuery(api.members.list, {
-    q: q || undefined,
+    q: debouncedQ || undefined,
     cohort: cohort || undefined,
     university: university || undefined,
     industry: industry || undefined,

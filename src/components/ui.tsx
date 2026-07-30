@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { createContext, useCallback, useContext, useState } from 'react'
 import type {
   ButtonHTMLAttributes,
   HTMLAttributes,
@@ -7,7 +7,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react'
-import { Loader2, Share2, Check, ChevronDown } from 'lucide-react'
+import { Loader2, Share2, Check, ChevronDown, CheckCircle2, AlertCircle, Info } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 /* ---------- Button ---------- */
@@ -573,5 +573,73 @@ export function SegmentedControl<T extends string>({
         </button>
       ))}
     </div>
+  )
+}
+
+/* ---------- Toast (lightweight notification) ---------- */
+type ToastType = 'success' | 'error' | 'info'
+
+interface ToastItem {
+  id: number
+  message: string
+  type: ToastType
+}
+
+const toastIcons: Record<ToastType, ReactNode> = {
+  success: <CheckCircle2 className="size-5 text-emerald-500" />,
+  error: <AlertCircle className="size-5 text-red-500" />,
+  info: <Info className="size-5 text-navy-500" />,
+}
+
+const toastStyles: Record<ToastType, string> = {
+  success: 'border-emerald-200 bg-white',
+  error: 'border-red-200 bg-white',
+  info: 'border-navy-200 bg-white',
+}
+
+type ToastContextValue = {
+  toast: (message: string, type?: ToastType) => void
+}
+
+const ToastContext = createContext<ToastContextValue>({
+  toast: () => {},
+})
+
+export function useToast() {
+  return useContext(ToastContext)
+}
+
+let toastId = 0
+
+export function ToastProvider({ children }: { children: ReactNode }) {
+  const [toasts, setToasts] = useState<ToastItem[]>([])
+
+  const toast = useCallback((message: string, type: ToastType = 'success') => {
+    const id = ++toastId
+    setToasts((prev) => [...prev, { id, message, type }])
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id))
+    }, 3000)
+  }, [])
+
+  return (
+    <ToastContext.Provider value={{ toast }}>
+      {children}
+      {/* Toast container */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex flex-col items-center gap-2 px-4">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className={cn(
+              'pointer-events-auto flex items-center gap-2.5 rounded-2xl border px-4 py-3 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-200',
+              toastStyles[t.type],
+            )}
+          >
+            {toastIcons[t.type]}
+            <p className="text-sm font-semibold text-navy-800">{t.message}</p>
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
   )
 }

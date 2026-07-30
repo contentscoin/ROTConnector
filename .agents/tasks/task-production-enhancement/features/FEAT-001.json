@@ -1,0 +1,31 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Production hardening and UX enhancements - Request editing, improved search debouncing, better error/empty states, and missing UI interactions",
+  "status": "in_progress",
+  "steps": [
+    "1. Add request editing capability: Create a new mutation `requests.update` in convex/requests.ts allowing the author (or admin) to edit title, body, category, tags, region, urgency of a request that is still 'open'. Add validation mirroring requests.create.",
+    "2. Add an Edit button on src/pages/RequestDetailPage.tsx visible to the author when status is 'open'. Create a modal/inline edit form similar to NewRequestPage that calls the update mutation. After save, the detail page should reflect changes via Convex reactivity.",
+    "3. Add search debouncing: In src/pages/MembersPage.tsx and src/pages/RequestsPage.tsx, debounce the search query input by 300ms before passing it as the `q` parameter to the Convex query. Use a simple useState + useEffect with setTimeout pattern (no external dep needed).",
+    "4. Add a toast/confirmation feedback system: Create a lightweight Toast component in src/components/ui.tsx (a fixed bottom notification that auto-dismisses after 3s). Use it in key mutation flows: request created, profile saved, connection sent, event RSVP'd.",
+    "5. Improve the NotificationsPage (src/pages/NotificationsPage.tsx): Add a 'Mark all read' button at the top. Group notifications by date. Show notification type icons. Add pull-to-refresh visual hint for mobile UX.",
+    "6. Add a proper 'About' / onboarding section: Create src/pages/AboutPage.tsx with app introduction, how-to-use guide, and contact info for the ROTC Business Association. Register route '/about' in App.tsx. Add a link to it in the home page footer area.",
+    "7. Add link editing to MyProfilePage: The member schema supports links[] but MyProfilePage does not have a UI to add/edit links. Add a 'Links' section with add/remove functionality for { label, url } pairs.",
+    "8. Ensure all mutations show proper error feedback - review all pages for missing error state display after failed mutations. In particular check EventDetailPage.tsx for RSVP errors."
+  ],
+  "acceptance_criteria": [
+    "pnpm build succeeds with no TypeScript errors",
+    "Request edit mutation exists in convex/requests.ts with proper validation",
+    "RequestDetailPage shows Edit UI for author when request is open",
+    "MembersPage and RequestsPage have debounced search (300ms delay)",
+    "A Toast component exists in ui.tsx and is used for key feedback",
+    "NotificationsPage has 'Mark all read' and date grouping",
+    "AboutPage exists and is routed at /about",
+    "MyProfilePage has link editing UI"
+  ],
+  "verification": [
+    "Run 'cd /projects/sandbox/ROTConnector && pnpm build' and confirm exit code 0"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
