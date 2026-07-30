@@ -9,9 +9,21 @@
   "orientation": "portrait",
   "background_color": "#f8fafc",
   "theme_color": "#1e3a5f",
+  "categories": ["business", "social", "networking"],
   "icons": [
     { "src": "/icons/icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
     { "src": "/icons/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
     { "src": "/icons/maskable-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ],
+  "related_applications": [
+    {
+      "platform": "play",
+      "url": "https://play.google.com/store/apps/details?id=com.rotcbiz.link",
+      "id": "com.rotcbiz.link"
+    },
+    {
+      "platform": "itunes",
+      "url": "https://apps.apple.com/app/id000000000"
+    }
   ]
 }

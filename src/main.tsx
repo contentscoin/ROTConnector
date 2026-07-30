@@ -7,6 +7,10 @@ import App from './App.tsx'
 import { SessionProvider } from './lib/session'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './components/ui'
+import { initSentry } from './lib/sentry'
+
+// Initialize Sentry (no-op if VITE_SENTRY_DSN is not set)
+initSentry()
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL as string
 if (!convexUrl) {
