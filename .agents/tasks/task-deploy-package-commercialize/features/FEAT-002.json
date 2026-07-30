@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Native mobile app packaging: Configure Android release signing, iOS release scheme, proper versioning for both platforms, app store metadata files, and Fastlane-ready directory structure.",
-  "status": "pending",
+  "status": "in_progress",
   "steps": [
     "Update android/app/build.gradle: add signingConfigs block for release (reading from environment variables or keystore.properties), enable minification with R8 for release builds, set versionCode to 1 and versionName to 1.0.0.",
     "Create android/keystore.properties.example with placeholder values documenting required signing config (storeFile, storePassword, keyAlias, keyPassword).",
