@@ -1,0 +1,32 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Phase 2 features: Enhanced admin matching tools, member statistics dashboard, announcements/business rooms, and monthly report generation",
+  "status": "completed",
+  "steps": [
+    "1. Add announcements/business rooms feature: Add a new 'announcements' table to convex/schema.ts with fields: authorId (Id<members>), title, body, category (union: notice/promotion/bizroom), pinned (boolean), status (active/archived), createdAt. Add indexes by_category and by_created.",
+    "2. Create convex/announcements.ts with CRUD functions: list (filter by category, paginated), create (admin only for notices, any active member for promotion/bizroom), archive (admin or author), get (single). Include author summary projection.",
+    "3. Create src/pages/AnnouncementsPage.tsx with category tabs (notice/promotion/bizroom), card list with author info, and creation form (admin sees all categories, member sees promotion/bizroom only). Add route '/community' in App.tsx.",
+    "4. Add community tab to bottom navigation in src/components/Layout.tsx replacing or adding alongside existing tabs. Use Megaphone icon from lucide-react.",
+    "5. Add member personal statistics: Create a new query in convex/members.ts called 'myStats' that returns: total connections made (accepted), total requests posted, total matches completed (as helper), contribution breakdown by type, and profile views count (approximate via a simple counter). For the initial version, derive from existing data without adding a new table.",
+    "6. Add a stats section to MyProfilePage showing: connections count, requests posted, times helped (matches where I'm helper with status done), total contribution points breakdown. Use the existing StatCard component.",
+    "7. Enhance admin matching workflow: In the AdminOverview, add a quick-match section that shows the top 3 open requests with the best recommended helper for each (pre-computed from recommendForRequest). Admin can one-click propose the recommended helper.",
+    "8. Add member export/summary for admin: Create a query 'admin.memberSummary' that returns CSV-friendly data (name, phone, company, cohort, university, industry, region, status, contribution score, createdAt). Add a 'Download CSV' button in AdminMembers component that generates a CSV file client-side from this data.",
+    "9. Update the Home page to show an announcements preview section (latest 2 notices/promotions) with a link to the full /community page."
+  ],
+  "acceptance_criteria": [
+    "pnpm build succeeds with no TypeScript errors",
+    "Announcements schema table exists with proper indexes",
+    "AnnouncementsPage renders with category tabs and creation form",
+    "Community tab appears in bottom navigation",
+    "MyProfilePage shows member statistics section",
+    "Admin overview has quick-match one-click section",
+    "Admin members has CSV export button",
+    "Home page shows announcements preview"
+  ],
+  "verification": [
+    "Run 'cd /projects/sandbox/ROTConnector && pnpm build' and confirm exit code 0"
+  ],
+  "blocked_reason": null,
+  "findings": "Updated convex/_generated/api.d.ts to register the new announcements module (standard Convex workflow when adding new backend modules). Used timeAgo() instead of formatDate() for announcement timestamps since createdAt is a number (epoch ms) not a date string. The FunctionReturnType pattern from convex/server is the correct way to type query results in components."
+}
