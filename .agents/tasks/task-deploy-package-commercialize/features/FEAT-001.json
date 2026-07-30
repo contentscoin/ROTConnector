@@ -1,0 +1,24 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "CI/CD pipeline and build optimization: Add GitHub Actions workflow for automated builds, Vercel preview deploys, and Convex deploy steps. Add production build optimizations (chunk splitting, compression hints).",
+  "status": "in_progress",
+  "steps": [
+    "Create .github/workflows/ci.yml with: pnpm install, lint (pnpm lint), type-check and build (pnpm build), with caching for pnpm store. Trigger on push to main and PRs.",
+    "Create .github/workflows/deploy.yml with: production deploy steps (comments/docs only since tokens needed) - Vercel deploy via vercel --prod, Convex deploy via npx convex deploy. Trigger on push to main only. Include environment secrets placeholders (VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID, CONVEX_DEPLOY_KEY).",
+    "Update vite.config.ts to add build optimizations: manual chunk splitting (vendor chunk for react/react-dom/react-router-dom, convex chunk for convex, firebase chunk for firebase), source map generation for production debugging.",
+    "Add a proper version to package.json (change from 0.0.0 to 1.0.0).",
+    "Update DEPLOY.md to document the CI/CD pipeline and reference the GitHub Actions workflows."
+  ],
+  "acceptance_criteria": [
+    "pnpm build succeeds with the updated vite.config.ts",
+    ".github/workflows/ci.yml exists with correct pnpm build steps",
+    ".github/workflows/deploy.yml exists with deploy step documentation",
+    "package.json version is 1.0.0"
+  ],
+  "verification": [
+    "Run pnpm build and confirm it succeeds with chunk splitting producing separate vendor/convex/firebase chunks in dist/assets/"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

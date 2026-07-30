@@ -14,4 +14,22 @@ export default defineConfig({
   server: {
     port: 5173,
   },
+  build: {
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/') || id.includes('node_modules/react-router-dom')) {
+            return 'vendor'
+          }
+          if (id.includes('node_modules/convex')) {
+            return 'convex'
+          }
+          if (id.includes('node_modules/firebase')) {
+            return 'firebase'
+          }
+        },
+      },
+    },
+  },
 })

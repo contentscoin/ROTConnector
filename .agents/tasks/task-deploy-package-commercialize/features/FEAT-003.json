@@ -1,0 +1,32 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Commercialization: Legal pages (이용약관, 개인정보처리방침), security headers, Sentry error tracking setup, production-ready footer with legal links, and enhanced SEO/OG metadata.",
+  "status": "pending",
+  "steps": [
+    "Create src/pages/TermsPage.tsx (이용약관): Include service terms for 알비연 링크 covering: service description, membership eligibility (ROTC Business Association members), user responsibilities, content guidelines, service limitations, termination policy, and disclaimer. All in Korean. Follow the Card/PageHeader UI pattern from AboutPage.tsx.",
+    "Create src/pages/PrivacyPage.tsx (개인정보처리방침): Include privacy policy covering: data controller info (ROTC 비즈니스연합회), collected data types (name, phone, company, industry), purpose of collection, retention period, third-party sharing policy, user rights (access, correction, deletion), contact for privacy inquiries. Follow Korean Personal Information Protection Act (PIPA) format. Use same UI patterns.",
+    "Add routes in src/App.tsx for /terms and /privacy pages (public, no auth required).",
+    "Update src/pages/HomePage.tsx footer section: add links to /terms and /privacy alongside existing /about link. Also add a version display (v1.0.0) and copyright notice '© 2025 ROTC 비즈니스연합회'.",
+    "Update vercel.json to add security headers: X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy (restrict camera, microphone, geolocation unless needed).",
+    "Add Sentry browser SDK integration: install @sentry/react, create src/lib/sentry.ts with lazy initialization (only when VITE_SENTRY_DSN env var is set), wrap ErrorBoundary.tsx to report errors to Sentry, add VITE_SENTRY_DSN placeholder to .env.production (commented out).",
+    "Update public/manifest.webmanifest: add categories field and related_applications for store links (placeholders).",
+    "Create public/robots.txt allowing all crawlers with sitemap reference.",
+    "Update index.html: add structured data (JSON-LD Organization schema) for SEO."
+  ],
+  "acceptance_criteria": [
+    "pnpm build succeeds with all new pages and Sentry integration",
+    "/terms route renders 이용약관 page",
+    "/privacy route renders 개인정보처리방침 page",
+    "vercel.json includes security headers configuration",
+    "HomePage footer has links to terms, privacy, about",
+    "Sentry integration is conditional (no-op without DSN)",
+    "robots.txt exists in public/"
+  ],
+  "verification": [
+    "Run pnpm build and confirm success with no TypeScript errors",
+    "Check dist/ output includes robots.txt"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
