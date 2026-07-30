@@ -15,15 +15,51 @@ GitHub Actions 워크플로우가 자동 빌드와 배포를 처리합니다.
 - PR 머지 전 빌드 성공 필수
 
 ### 프로덕션 배포 (`.github/workflows/deploy.yml`)
-- **트리거**: `main` 브랜치 push (머지 시 자동 배포)
-- **단계**: build -> Convex deploy -> Vercel production deploy
-- **필요 시크릿** (GitHub Settings > Secrets에서 설정):
-  - `VERCEL_TOKEN` - Vercel 개인 액세스 토큰
-  - `VERCEL_ORG_ID` - Vercel 팀/조직 ID
-  - `VERCEL_PROJECT_ID` - Vercel 프로젝트 ID
-  - `CONVEX_DEPLOY_KEY` - Convex 프로덕션 배포 키
+- **트리거**
+  - `main` 브랜치 push (머지 시 자동 배포)
+  - **수동 실행**(`workflow_dispatch`): GitHub **Actions 탭 → Deploy Production →
+    Run workflow → 브랜치 `main` 선택 → Run**. 최초 오픈 배포, 실패한 배포 재시도,
+    커밋 없이 재배포할 때 사용한다.
+- **단계**: pnpm install → `npx convex deploy -y`(백엔드) → Vercel production deploy(프론트).
+  프론트가 이번 릴리스에서 바뀐 Convex 쿼리 시그니처를 호출하므로 **백엔드가 항상 먼저** 올라간다.
+- **동시 실행 방지**: `concurrency: production-deploy` 그룹. 진행 중인 배포는 취소하지 않고
+  큐에 넣어 순서대로 실행한다(백엔드만 올라간 반쪽 상태를 만들지 않기 위해).
+  마이그레이션 워크플로우도 같은 그룹이라 배포와 겹치지 않는다.
+
+### 프로덕션 마이그레이션 (`.github/workflows/migrate-production.yml`)
+- **트리거**: **수동 실행 전용**(`workflow_dispatch`). push/merge로는 절대 실행되지 않는다 —
+  `wipeDemoData` 같은 파괴적 마이그레이션이 배포마다 돌면 안 되기 때문이다.
+- **실행 방법**: Actions 탭 → **Run Convex Migration (production)** → Run workflow →
+  브랜치 `main` → 입력값 채우기 → Run.
+  | 입력 | 설명 |
+  | --- | --- |
+  | `migration` | 드롭다운에서 선택: `bootstrapAdmin`, `promoteAdmin`, `normalizeCohorts`, `backfillSearchText`, `rebuildRollups`, `wipeDemoData` |
+  | `args` | JSON 인자. `bootstrapAdmin`: `{"name":"홍길동","phone":"01012345678"}` / `promoteAdmin`: `{"phone":"01012345678"}` / 그 외는 비움 |
+  | `confirm` | `wipeDemoData`는 `WIPE`, `rebuildRollups`는 `REBUILD` 를 **직접 입력**해야 실행된다(기본값 없음). 그 외 마이그레이션에 값을 넣으면 실행 거부. |
+- 내부적으로 `npx convex run migrations:<선택값> <args+confirm>` 을 실행한다
+  (`CONVEX_DEPLOY_KEY`가 프로덕션 배포를 가리키므로 `--prod` 플래그는 불필요).
+- 각 마이그레이션의 의미와 실행 순서는 아래 **§2-1 / §3** 참고.
+
+### 필요 시크릿 (GitHub Settings > Secrets and variables > Actions > **Repository secrets**)
+| 시크릿 | 용도 | 사용 워크플로우 |
+| --- | --- | --- |
+| `CONVEX_DEPLOY_KEY` | Convex 프로덕션 배포 키 (Convex 대시보드 → Settings → Deploy Keys → Generate Production Deploy Key) | deploy, migrate |
+| `VERCEL_TOKEN` | Vercel 개인 액세스 토큰 (Vercel → Account Settings → Tokens) | deploy |
+| `VERCEL_ORG_ID` | Vercel 팀/조직 ID (`.vercel/project.json` 또는 팀 설정) | deploy |
+| `VERCEL_PROJECT_ID` | Vercel 프로젝트 ID (`.vercel/project.json`) | deploy |
 
 > **참고**: 시크릿 미설정 시 수동 배포(아래 섹션 2, 4) 사용.
+
+### 최초 프로덕션 오픈 순서 (Actions만으로)
+
+1. 위 4개 시크릿 등록.
+2. PR을 `main`에 머지(또는 Actions 탭에서 `Deploy Production` 수동 실행) →
+   Convex + Vercel 배포 완료.
+3. 기존 데이터가 있으면 `Run Convex Migration (production)` 으로 §2-1 백필 2회 실행
+   (`backfillSearchText` → `rebuildRollups` + `confirm: REBUILD`).
+   빈 prod면 건너뛴다.
+4. 시드/데모 데이터가 남아 있으면 `wipeDemoData` + `confirm: WIPE` 실행.
+5. `bootstrapAdmin` 으로 최초 운영진 생성(§3) → 로그인 → §5 스모크 테스트.
 
 ---
 
@@ -36,8 +72,11 @@ GitHub Actions 워크플로우가 자동 빌드와 배포를 처리합니다.
 
 ## 2. Convex 프로덕션 배포
 
+**권장 경로는 GitHub Actions**(§0) — `Deploy Production` 워크플로우가 Convex 배포와
+Vercel 배포를 순서대로 처리한다. 아래는 로컬에서 직접 배포할 때의 동등한 명령이다.
+
 ```bash
-npx convex deploy            # 함수 + 스키마를 prod에 배포
+npx convex deploy            # 함수 + 스키마를 prod에 배포 (CI에서는 -y로 프롬프트 생략)
 ```
 
 - 신규 테이블(`notifications`, `auditLogs`, `eventRsvps`, `announcements`,
@@ -46,6 +85,8 @@ npx convex deploy            # 함수 + 스키마를 prod에 배포
   ```bash
   npx convex run migrations:normalizeCohorts
   ```
+  Actions: `Run Convex Migration (production)` → `migration: normalizeCohorts`
+  (`args`/`confirm` 비움).
 
 ### 2-1. 1000명 기준 확장 백필 (기존 데이터가 있을 때 **필수**)
 
@@ -65,6 +106,13 @@ npx convex run migrations:backfillSearchText --prod
 npx convex run migrations:rebuildRollups '{"confirm":"REBUILD"}' --prod
 ```
 
+Actions로 실행할 때(`Run Convex Migration (production)`, 위와 같은 순서로 2회):
+
+| 순서 | `migration` | `args` | `confirm` |
+| --- | --- | --- | --- |
+| 1 | `backfillSearchText` | (비움) | (비움) |
+| 2 | `rebuildRollups` | (비움) | `REBUILD` |
+
 - 둘 다 `internalMutation`이라 클라이언트에서 호출 불가.
 - 200건씩 처리하고 남으면 스케줄러로 자기 자신을 이어 호출한다(한 트랜잭션의
   읽기·쓰기 수를 고정). 실행 직후 바로 끝나지 않고 백그라운드로 완주하므로,
@@ -83,8 +131,12 @@ npx convex run migrations:rebuildRollups '{"confirm":"REBUILD"}' --prod
 npx convex run migrations:bootstrapAdmin '{"name":"홍길동","phone":"01012345678"}' --prod
 ```
 
+Actions: `migration: bootstrapAdmin`, `args: {"name":"홍길동","phone":"01012345678"}`,
+`confirm` 비움.
+
 - `internalMutation`이라 클라이언트에서 호출 불가(안전).
-- 이미 회원이 있는 경우엔 `migrations:promoteAdmin '{"phone":"..."}'`도 사용 가능.
+- 이미 회원이 있는 경우엔 `migrations:promoteAdmin '{"phone":"..."}'`도 사용 가능
+  (Actions: `migration: promoteAdmin`, `args: {"phone":"01012345678"}`).
 - 이후 추가 운영진은 운영진 콘솔(/admin → 회원)에서 토글로 지정.
 
 **데모 데이터 초기화**: prod에 시드/데모 데이터가 있으면 오픈 전 삭제:
@@ -92,13 +144,17 @@ npx convex run migrations:bootstrapAdmin '{"name":"홍길동","phone":"010123456
 npx convex run migrations:wipeDemoData '{"confirm":"WIPE"}' --prod
 ```
 (모든 앱 테이블 전 행 삭제. 2026-07-12 1회 실행됨 — 구 시드 14명 제거.)
+Actions: `migration: wipeDemoData`, `args` 비움, `confirm: WIPE` **직접 입력**
+(확인값이 정확히 일치하지 않으면 워크플로우가 실행 전에 실패한다).
 
 > **prod에서 `seed:run` 실행 금지** — 데모 회원 13명·샘플 데이터를 만든다. 시드는 dev 전용.
 
 ## 4. 프론트엔드 배포 (Vercel)
 
-- 배포는 **`vercel --prod` CLI**로 한다. 이 프로젝트는 git push 자동 빌드가 아니다
-  (main 푸시만으로는 Vercel 빌드가 트리거되지 않음 — `vercel ls`로 확인됨).
+- 기본 경로는 **GitHub Actions**(`deploy.yml`의 Vercel 단계 —
+  `vercel pull` → `vercel build --prod` → `vercel deploy --prebuilt --prod`).
+- 로컬에서 직접 할 때는 **`vercel --prod` CLI**로 한다. 이 프로젝트는 Vercel의 git 연동
+  자동 빌드가 아니다(main 푸시만으로는 Vercel 빌드가 트리거되지 않음 — `vercel ls`로 확인됨).
   ```
   vercel --prod --yes
   ```
