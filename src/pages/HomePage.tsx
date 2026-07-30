@@ -282,6 +282,16 @@ export function HomePage() {
           </div>
         </section>
       )}
+
+      {/* Footer */}
+      <footer className="border-t border-navy-100 pt-4 pb-2 text-center">
+        <Link
+          to="/about"
+          className="text-sm font-semibold text-navy-500 hover:text-navy-700"
+        >
+          알비연 링크 소개
+        </Link>
+      </footer>
     </div>
   )
 }

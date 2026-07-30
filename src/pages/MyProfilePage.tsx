@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from 'convex/react'
-import { LogOut, Save, Award, ShieldCheck, Check } from 'lucide-react'
+import { LogOut, Save, Award, ShieldCheck, Check, Plus, Trash2, LinkIcon } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { useSession } from '../lib/session'
 import {
@@ -15,6 +15,7 @@ import {
   Select,
   TagSuggest,
   Textarea,
+  useToast,
 } from '../components/ui'
 import { requestStatusLabel, requestStatusTone } from '../lib/format'
 import { addTag, errorMessage, splitTags } from '../lib/utils'
@@ -27,6 +28,7 @@ export function MyProfilePage() {
   const update = useMutation(api.members.update)
   const myRequests = useQuery(api.requests.mine, token ? { token } : 'skip')
   const pool = useQuery(api.members.tagPool, {})
+  const { toast } = useToast()
 
   const [form, setForm] = useState(() => ({
     name: member?.name ?? '',
@@ -42,6 +44,9 @@ export function MyProfilePage() {
     helpOffer: (member?.helpOffer ?? []).join(', '),
     helpNeed: (member?.helpNeed ?? []).join(', '),
   }))
+  const [links, setLinks] = useState<{ label: string; url: string }[]>(
+    () => member?.links ?? [],
+  )
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -86,9 +91,11 @@ export function MyProfilePage() {
           industry: splitTags(form.industry),
           helpOffer: splitTags(form.helpOffer),
           helpNeed: splitTags(form.helpNeed),
+          links: links.filter((l) => l.label.trim() && l.url.trim()),
         },
       })
       setSaved(true)
+      toast('프로필이 저장되었습니다.')
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -263,6 +270,68 @@ export function MyProfilePage() {
             onAdd={(t) => set('helpNeed', addTag(form.helpNeed, t))}
           />
         </Field>
+
+        {/* 링크 */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-navy-800">
+              <LinkIcon className="mr-1 inline size-3.5" />
+              링크
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setLinks((prev) => [...prev, { label: '', url: '' }])
+                setSaved(false)
+              }}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-navy-500 hover:text-navy-700"
+            >
+              <Plus className="size-3.5" />
+              추가
+            </button>
+          </div>
+          {links.length === 0 && (
+            <p className="text-xs text-navy-400">
+              홈페이지, 블로그, SNS 등 링크를 추가하세요.
+            </p>
+          )}
+          {links.map((link, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <Input
+                className="flex-1"
+                placeholder="라벨 (예: 홈페이지)"
+                value={link.label}
+                onChange={(e) => {
+                  const next = [...links]
+                  next[idx] = { ...next[idx], label: e.target.value }
+                  setLinks(next)
+                  setSaved(false)
+                }}
+              />
+              <Input
+                className="flex-[2]"
+                placeholder="https://..."
+                value={link.url}
+                onChange={(e) => {
+                  const next = [...links]
+                  next[idx] = { ...next[idx], url: e.target.value }
+                  setLinks(next)
+                  setSaved(false)
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setLinks((prev) => prev.filter((_, i) => i !== idx))
+                  setSaved(false)
+                }}
+                className="shrink-0 text-navy-300 hover:text-red-500"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </div>
+          ))}
+        </div>
 
         {error && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">

@@ -16,6 +16,7 @@ import { MyProfilePage } from './pages/MyProfilePage'
 import { AdminDashboardPage } from './pages/AdminDashboardPage'
 import { EventsPage } from './pages/EventsPage'
 import { EventDetailPage } from './pages/EventDetailPage'
+import { AboutPage } from './pages/AboutPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 
 function Protected({
@@ -85,6 +86,7 @@ export default function App() {
         />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:id" element={<EventDetailPage />} />
+        <Route path="/about" element={<AboutPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Layout>

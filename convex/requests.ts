@@ -154,6 +154,46 @@ export const tagSuggestions = query({
   },
 })
 
+// 요청 수정 (작성자 또는 운영진, open 상태일 때만)
+export const update = mutation({
+  args: {
+    token: v.string(),
+    requestId: v.id('requests'),
+    title: v.string(),
+    body: v.string(),
+    category: v.string(),
+    tags: v.optional(v.array(v.string())),
+    region: v.optional(v.string()),
+    urgency: v.optional(
+      v.union(v.literal('low'), v.literal('normal'), v.literal('high')),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const me = await requireMember(ctx, args.token)
+    const req = await ctx.db.get(args.requestId)
+    if (!req) throw new Error('요청을 찾을 수 없습니다.')
+    if (req.authorId !== me._id && !me.isAdmin) {
+      throw new Error('작성자 또는 운영진만 수정할 수 있습니다.')
+    }
+    if (req.status !== 'open') {
+      throw new Error('접수 상태의 요청만 수정할 수 있습니다.')
+    }
+    const title = args.title.trim()
+    const body = args.body.trim()
+    if (title.length < 2) throw new Error('제목을 입력해주세요.')
+    if (body.length < 5) throw new Error('상세 내용을 5자 이상 입력해주세요.')
+    await ctx.db.patch(args.requestId, {
+      title,
+      body,
+      category: args.category,
+      tags: normalizeTags(args.tags ?? []),
+      region: args.region,
+      urgency: args.urgency ?? 'normal',
+    })
+    return args.requestId
+  },
+})
+
 // 상태 변경 (작성자 또는 운영진)
 export const setStatus = mutation({
   args: {

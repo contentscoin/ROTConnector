@@ -13,6 +13,7 @@ import {
   Select,
   TagSuggest,
   Textarea,
+  useToast,
 } from '../components/ui'
 import { addTag, errorMessage, splitTags } from '../lib/utils'
 
@@ -41,6 +42,7 @@ export function NewRequestPage() {
   const createRequest = useMutation(api.requests.create)
   const tagSuggestions = useQuery(api.requests.tagSuggestions, {})
   const navigate = useNavigate()
+  const { toast } = useToast()
 
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -66,6 +68,7 @@ export function NewRequestPage() {
         tags: splitTags(tags),
         urgency,
       })
+      toast('도움요청이 등록되었습니다.')
       navigate(`/requests/${id}`, { replace: true })
     } catch (err) {
       setError(errorMessage(err))

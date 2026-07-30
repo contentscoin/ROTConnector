@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   Trash2,
   Undo2,
+  Pencil,
+  X,
 } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -18,10 +20,15 @@ import {
   Badge,
   Button,
   Card,
+  Field,
+  Input,
   LoadingScreen,
   SectionHeader,
   Select,
   ShareButton,
+  TagSuggest,
+  Textarea,
+  useToast,
 } from '../components/ui'
 import { RequestStepper } from '../components/cards'
 import {
@@ -32,9 +39,29 @@ import {
   urgencyTone,
   timeAgo,
 } from '../lib/format'
-import { errorMessage } from '../lib/utils'
+import { addTag, errorMessage, splitTags } from '../lib/utils'
 
 const reqStatuses = ['open', 'matching', 'connected', 'closed'] as const
+
+const categories = [
+  '투자',
+  '영업',
+  '채용',
+  '법률',
+  '세무/회계',
+  '마케팅',
+  '제휴',
+  '해외',
+  '부동산',
+  '물류',
+  '기타',
+]
+const regions = ['서울', '경기', '인천', '부산', '대구', '대전', '광주', '기타']
+const urgencies = [
+  { value: 'low', label: '여유' },
+  { value: 'normal', label: '보통' },
+  { value: 'high', label: '급함' },
+] as const
 
 export function RequestDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -55,11 +82,23 @@ export function RequestDetailPage() {
   const setMatchStatus = useMutation(api.matches.setStatus)
   const complete = useMutation(api.matches.complete)
   const removeMatch = useMutation(api.matches.remove)
+  const updateRequest = useMutation(api.requests.update)
+  const tagSuggestions = useQuery(api.requests.tagSuggestions, {})
+  const { toast } = useToast()
 
   const [helperId, setHelperId] = useState('')
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState({
+    title: '',
+    body: '',
+    category: '',
+    tags: '',
+    region: '',
+    urgency: 'normal' as 'low' | 'normal' | 'high',
+  })
 
   if (req === undefined) return <LoadingScreen />
   if (req === null)
@@ -75,6 +114,7 @@ export function RequestDetailPage() {
     )
 
   const isAuthor = !!member && member._id === req.authorId
+  const canEdit = (isAuthor || isAdmin) && req.status === 'open'
   // 작성자는 open/closed 상태일 때만 토글 가능 (운영진이 설정한 매칭중/연결완료는 못 되돌림)
   const authorCanEdit =
     isAuthor && (req.status === 'open' || req.status === 'closed')
@@ -96,6 +136,43 @@ export function RequestDetailPage() {
     }
   }
 
+  function startEditing() {
+    setEditForm({
+      title: req!.title,
+      body: req!.body,
+      category: req!.category,
+      tags: req!.tags.join(', '),
+      region: req!.region ?? '',
+      urgency: req!.urgency,
+    })
+    setEditing(true)
+    setError(null)
+  }
+
+  async function saveEdit() {
+    if (!token || !req) return
+    setError(null)
+    setBusy(true)
+    try {
+      await updateRequest({
+        token,
+        requestId,
+        title: editForm.title.trim(),
+        body: editForm.body.trim(),
+        category: editForm.category,
+        tags: splitTags(editForm.tags),
+        region: editForm.region || undefined,
+        urgency: editForm.urgency,
+      })
+      setEditing(false)
+      toast('요청이 수정되었습니다.')
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -106,14 +183,131 @@ export function RequestDetailPage() {
           <ChevronLeft className="size-4" />
           뒤로
         </button>
-        <ShareButton
-          title={`${req.title} · 알비연 링크`}
-          text={`[도움요청] ${req.title}`}
-        />
+        <div className="flex items-center gap-2">
+          {canEdit && !editing && (
+            <button
+              onClick={startEditing}
+              className="press inline-flex h-9 items-center gap-1.5 rounded-lg border border-navy-200 bg-white px-3 text-sm font-semibold text-navy-700 hover:bg-navy-50"
+            >
+              <Pencil className="size-4" />
+              수정
+            </button>
+          )}
+          <ShareButton
+            title={`${req.title} · 알비연 링크`}
+            text={`[도움요청] ${req.title}`}
+          />
+        </div>
       </div>
 
       {/* 진행 단계 */}
       <RequestStepper status={req.status} />
+
+      {/* 수정 폼 */}
+      {editing && (
+        <Card className="space-y-4 p-5">
+          <div className="flex items-center justify-between">
+            <p className="font-bold text-navy-800">요청 수정</p>
+            <button
+              onClick={() => setEditing(false)}
+              className="text-navy-400 hover:text-navy-600"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
+          <Field label="제목" required>
+            <Input
+              value={editForm.title}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, title: e.target.value }))
+              }
+              maxLength={80}
+            />
+          </Field>
+          <Field label="상세 내용" required>
+            <Textarea
+              value={editForm.body}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, body: e.target.value }))
+              }
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="분류">
+              <Select
+                value={editForm.category}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, category: e.target.value }))
+                }
+              >
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="지역">
+              <Select
+                value={editForm.region}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, region: e.target.value }))
+                }
+              >
+                <option value="">선택 안함</option>
+                {regions.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          <Field label="태그" hint="쉼표로 구분">
+            <Input
+              value={editForm.tags}
+              onChange={(e) =>
+                setEditForm((f) => ({ ...f, tags: e.target.value }))
+              }
+            />
+            <TagSuggest
+              suggestions={tagSuggestions ?? []}
+              value={editForm.tags}
+              onAdd={(t) =>
+                setEditForm((f) => ({ ...f, tags: addTag(f.tags, t) }))
+              }
+            />
+          </Field>
+          <Field label="긴급도">
+            <div className="grid grid-cols-3 gap-2">
+              {urgencies.map((u) => (
+                <button
+                  key={u.value}
+                  type="button"
+                  onClick={() =>
+                    setEditForm((f) => ({ ...f, urgency: u.value }))
+                  }
+                  className={`rounded-xl border py-2.5 text-sm font-semibold transition-colors ${
+                    editForm.urgency === u.value
+                      ? 'border-navy-800 bg-navy-800 text-white'
+                      : 'border-navy-200 bg-white text-navy-600'
+                  }`}
+                >
+                  {u.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Button
+            className="w-full"
+            onClick={saveEdit}
+            loading={busy}
+            disabled={!editForm.title.trim() || !editForm.body.trim()}
+          >
+            저장하기
+          </Button>
+        </Card>
+      )}
 
       {/* 요청 본문 */}
       <Card className="p-5">

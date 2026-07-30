@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from 'convex/react'
 import {
@@ -10,6 +10,7 @@ import {
   Sparkles,
   Award,
   CalendarDays,
+  RefreshCw,
   type LucideIcon,
 } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
@@ -88,6 +89,33 @@ export function NotificationsPage() {
   const registerPush = useMutation(api.push.register)
 
   const hasUnread = (rows ?? []).some((n) => !n.read)
+
+  // Group notifications by date
+  const grouped = useMemo(() => {
+    if (!rows) return null
+    const groups: { label: string; items: NotificationRow[] }[] = []
+    const now = Date.now()
+    const today = new Date(now).toDateString()
+    const yesterday = new Date(now - 86400000).toDateString()
+
+    for (const n of rows) {
+      const d = new Date(n.createdAt).toDateString()
+      let label: string
+      if (d === today) label = '오늘'
+      else if (d === yesterday) label = '어제'
+      else {
+        const date = new Date(n.createdAt)
+        label = `${date.getMonth() + 1}월 ${date.getDate()}일`
+      }
+      const last = groups[groups.length - 1]
+      if (last && last.label === label) {
+        last.items.push(n)
+      } else {
+        groups.push({ label, items: [n] })
+      }
+    }
+    return groups
+  }, [rows])
 
   // 웹 푸시: 설정·지원되고 아직 권한 허용 전일 때만 진입점 노출
   const [pushOn, setPushOn] = useState(() => pushPermissionGranted())
@@ -175,52 +203,64 @@ export function NotificationsPage() {
           description="교류 신청·수락, 가입 승인 소식이 여기에 표시됩니다."
         />
       ) : (
-        <div className="space-y-2.5">
-          {rows.map((n) => {
-            const meta = ICONS[n.type] ?? {
-              icon: Bell,
-              tone: 'bg-navy-100 text-navy-600',
-            }
-            const Icon = meta.icon
-            return (
-              <Card
-                key={n._id}
-                interactive
-                onClick={() => open(n)}
-                className={`flex items-start gap-3 p-4 ${
-                  n.read ? '' : 'ring-1 ring-navy-200'
-                }`}
-              >
-                <span
-                  className={`flex size-9 shrink-0 items-center justify-center rounded-full ${meta.tone}`}
-                >
-                  <Icon className="size-[18px]" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start gap-2">
-                    <p
-                      className={`min-w-0 flex-1 text-sm ${
-                        n.read
-                          ? 'font-medium text-navy-700'
-                          : 'font-bold text-navy-900'
-                      }`}
+        <div className="space-y-4">
+          {/* Pull-to-refresh visual hint */}
+          <div className="flex items-center justify-center gap-1.5 text-xs text-navy-400">
+            <RefreshCw className="size-3" />
+            <span>아래로 당겨 새로고침</span>
+          </div>
+          {grouped!.map((group) => (
+            <div key={group.label} className="space-y-2.5">
+              <p className="px-1 text-xs font-bold text-navy-400 uppercase tracking-wide">
+                {group.label}
+              </p>
+              {group.items.map((n) => {
+                const meta = ICONS[n.type] ?? {
+                  icon: Bell,
+                  tone: 'bg-navy-100 text-navy-600',
+                }
+                const Icon = meta.icon
+                return (
+                  <Card
+                    key={n._id}
+                    interactive
+                    onClick={() => open(n)}
+                    className={`flex items-start gap-3 p-4 ${
+                      n.read ? '' : 'ring-1 ring-navy-200'
+                    }`}
+                  >
+                    <span
+                      className={`flex size-9 shrink-0 items-center justify-center rounded-full ${meta.tone}`}
                     >
-                      {n.title}
-                    </p>
-                    {!n.read && (
-                      <span className="mt-1.5 size-2 shrink-0 rounded-full bg-red-500" />
-                    )}
-                  </div>
-                  {n.body && (
-                    <p className="mt-0.5 text-sm text-navy-500">{n.body}</p>
-                  )}
-                  <p className="mt-1 text-xs text-navy-400">
-                    {timeAgo(n.createdAt)}
-                  </p>
-                </div>
-              </Card>
-            )
-          })}
+                      <Icon className="size-[18px]" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start gap-2">
+                        <p
+                          className={`min-w-0 flex-1 text-sm ${
+                            n.read
+                              ? 'font-medium text-navy-700'
+                              : 'font-bold text-navy-900'
+                          }`}
+                        >
+                          {n.title}
+                        </p>
+                        {!n.read && (
+                          <span className="mt-1.5 size-2 shrink-0 rounded-full bg-red-500" />
+                        )}
+                      </div>
+                      {n.body && (
+                        <p className="mt-0.5 text-sm text-navy-500">{n.body}</p>
+                      )}
+                      <p className="mt-1 text-xs text-navy-400">
+                        {timeAgo(n.createdAt)}
+                      </p>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          ))}
         </div>
       )}
     </div>
