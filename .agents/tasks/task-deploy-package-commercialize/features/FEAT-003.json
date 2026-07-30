@@ -2,7 +2,7 @@
   "id": "FEAT-003",
   "type": "feat",
   "description": "Commercialization: Legal pages (이용약관, 개인정보처리방침), security headers, Sentry error tracking setup, production-ready footer with legal links, and enhanced SEO/OG metadata.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create src/pages/TermsPage.tsx (이용약관): Include service terms for 알비연 링크 covering: service description, membership eligibility (ROTC Business Association members), user responsibilities, content guidelines, service limitations, termination policy, and disclaimer. All in Korean. Follow the Card/PageHeader UI pattern from AboutPage.tsx.",
     "Create src/pages/PrivacyPage.tsx (개인정보처리방침): Include privacy policy covering: data controller info (ROTC 비즈니스연합회), collected data types (name, phone, company, industry), purpose of collection, retention period, third-party sharing policy, user rights (access, correction, deletion), contact for privacy inquiries. Follow Korean Personal Information Protection Act (PIPA) format. Use same UI patterns.",
@@ -28,5 +28,5 @@
     "Check dist/ output includes robots.txt"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Successfully installed @sentry/react 10.69.0. Build produces a Sentry chunk that is tree-shaken when DSN is not set. robots.txt correctly copied to dist/. vercel.json rewrite pattern preserved exactly as original. All acceptance criteria met."
 }
