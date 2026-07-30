@@ -10,11 +10,12 @@ import {
   UserPlus,
   GraduationCap,
   School,
+  Megaphone,
 } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { Badge, Card, Spinner, SectionHeader, StatCard } from '../components/ui'
 import { RequestCard, MemberCard } from '../components/cards'
-import { formatCohort, formatDate } from '../lib/format'
+import { formatCohort, formatDate, timeAgo } from '../lib/format'
 import { useSession } from '../lib/session'
 import { profileCompleteness } from '../lib/profile'
 
@@ -35,6 +36,8 @@ export function HomePage() {
     token ? { token } : 'skip',
   )
   const facets = useQuery(api.members.facets, {})
+  // 최신 공지/홍보 2건 (커뮤니티 프리뷰)
+  const announcements = useQuery(api.announcements.list, { limit: 2 })
   // 내 동기·동문 수 (본인 제외 active 기준)
   const peers = useQuery(api.members.peerCounts, token ? { token } : 'skip')
 
@@ -276,6 +279,48 @@ export function HomePage() {
                     </p>
                   </div>
                   <ChevronRight className="size-4 text-navy-300" />
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* 커뮤니티 소식 (최신 공지/홍보) */}
+      {announcements && announcements.length > 0 && (
+        <section>
+          <HomeSection title="커뮤니티 소식" to="/community" />
+          <div className="space-y-2.5">
+            {announcements.map((item) => (
+              <Link key={item._id} to="/community" className="press block">
+                <Card className="p-4 lift hover:border-navy-200 hover:shadow-soft">
+                  <div className="mb-1 flex items-center gap-2">
+                    <Megaphone className="size-4 text-gold-500" />
+                    <Badge
+                      className={
+                        item.category === 'notice'
+                          ? 'bg-red-100 text-red-700'
+                          : item.category === 'promotion'
+                            ? 'bg-gold-400/30 text-gold-600'
+                            : 'bg-navy-100 text-navy-600'
+                      }
+                    >
+                      {item.category === 'notice'
+                        ? '공지'
+                        : item.category === 'promotion'
+                          ? '홍보'
+                          : '비즈룸'}
+                    </Badge>
+                    <span className="ml-auto text-xs text-navy-400">
+                      {timeAgo(item.createdAt)}
+                    </span>
+                  </div>
+                  <p className="truncate font-bold text-navy-900">
+                    {item.title}
+                  </p>
+                  <p className="mt-0.5 line-clamp-1 text-xs text-navy-500">
+                    {item.body}
+                  </p>
                 </Card>
               </Link>
             ))}

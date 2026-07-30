@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from 'convex/react'
-import { LogOut, Save, Award, ShieldCheck, Check, Plus, Trash2, LinkIcon } from 'lucide-react'
+import { LogOut, Save, Award, ShieldCheck, Check, Plus, Trash2, LinkIcon, Handshake, HelpCircle, Heart } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
 import { useSession } from '../lib/session'
 import {
@@ -13,6 +13,7 @@ import {
   Input,
   SectionHeader,
   Select,
+  StatCard,
   TagSuggest,
   Textarea,
   useToast,
@@ -28,6 +29,7 @@ export function MyProfilePage() {
   const update = useMutation(api.members.update)
   const myRequests = useQuery(api.requests.mine, token ? { token } : 'skip')
   const pool = useQuery(api.members.tagPool, {})
+  const stats = useQuery(api.members.myStats, token ? { token } : 'skip')
   const { toast } = useToast()
 
   const [form, setForm] = useState(() => ({
@@ -164,6 +166,38 @@ export function MyProfilePage() {
             완성된 프로필일수록 더 잘 연결됩니다.
           </p>
         </Card>
+      )}
+
+      {/* 활동 통계 */}
+      {stats && (
+        <section>
+          <SectionHeader title="내 활동 통계" />
+          <div className="grid grid-cols-2 gap-2.5">
+            <StatCard
+              icon={<Handshake className="size-5" />}
+              label="교류 성사"
+              value={stats.acceptedConnections}
+              tone="navy"
+            />
+            <StatCard
+              icon={<HelpCircle className="size-5" />}
+              label="도움요청 등록"
+              value={stats.requestsPosted}
+            />
+            <StatCard
+              icon={<Heart className="size-5" />}
+              label="도움 완료"
+              value={stats.helperDone}
+              tone="emerald"
+            />
+            <StatCard
+              icon={<Award className="size-5" />}
+              label="기여 점수"
+              value={stats.totalPoints}
+              tone="gold"
+            />
+          </div>
+        </section>
       )}
 
       {/* 편집 폼 */}

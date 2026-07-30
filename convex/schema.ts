@@ -167,6 +167,23 @@ export default defineSchema({
     .index('by_created', ['createdAt'])
     .index('by_target', ['targetId']),
 
+  // 공지/홍보/비즈룸 게시판
+  announcements: defineTable({
+    authorId: v.id('members'),
+    title: v.string(),
+    body: v.string(),
+    category: v.union(
+      v.literal('notice'), // 공지
+      v.literal('promotion'), // 홍보
+      v.literal('bizroom'), // 비즈룸
+    ),
+    pinned: v.boolean(),
+    status: v.union(v.literal('active'), v.literal('archived')),
+    createdAt: v.number(),
+  })
+    .index('by_category', ['category', 'createdAt'])
+    .index('by_created', ['createdAt']),
+
   // 파일럿 경량 세션 (phone 클레임). Phase 2에 Convex Auth로 교체.
   sessions: defineTable({
     token: v.string(),

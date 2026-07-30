@@ -325,6 +325,27 @@ export const connections = query({
   },
 })
 
+// 운영진 CSV 내보내기용: 전체 회원 요약 (name, phone, company, cohort, university, industry, region, status, contributionScore, createdAt)
+export const memberSummary = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    await requireAdmin(ctx, token)
+    const rows = await ctx.db.query('members').collect()
+    return rows.map((m) => ({
+      name: m.name,
+      phone: m.phone,
+      company: m.company ?? '',
+      cohort: m.cohort ?? '',
+      university: m.university ?? '',
+      industry: m.industry.join(', '),
+      region: m.region ?? '',
+      status: m.status,
+      contributionScore: m.contributionScore,
+      createdAt: m.createdAt,
+    }))
+  },
+})
+
 // 운영진 감사 로그: 최신순. action 필터 옵션. 불변 기록이라 읽기 전용.
 export const auditLogs = query({
   args: {
