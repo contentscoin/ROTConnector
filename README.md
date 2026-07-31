@@ -34,16 +34,28 @@ pnpm dev            # 프론트(localhost:5173)
 
 ## 배포
 
+`main` 에 머지하면 두 갈래로 자동 배포된다.
+
+- **프론트 (Vercel)**: Vercel 대시보드의 GitHub git 연동이 `main` push마다 스스로 빌드·배포
+  (프로젝트 `rotconnector` → https://rotconnector.vercel.app). 빌드 설정은 `vercel.json`.
+- **백엔드 (Convex)**: GitHub Actions `Deploy Production (backend / Convex)`
+  (`.github/workflows/deploy.yml`) 가 `npx convex deploy -y` 실행 (프로덕션 `robust-ostrich-0`).
+  Actions 탭에서 수동 실행도 가능하다.
+
+필요한 GitHub 시크릿은 `CONVEX_DEPLOY_KEY` 하나뿐이다(`VERCEL_*` 시크릿은 더 이상 쓰지 않음).
+쿼리 시그니처가 바뀌는 릴리스는 백엔드를 먼저 올려야 한다 — 자세한 내용은 `DEPLOY.md` §0 참고.
+
+로컬에서 직접 배포해야 할 때(비상용 우회로):
+
 ```bash
 # 백엔드 (Convex 프로덕션: robust-ostrich-0)
 npx convex deploy -y
 
-# 프론트 (Vercel 프로덕션: 스코프 jakes-projects-0ab50f91 / 프로젝트 rotconnector)
-vercel --prod --yes --scope jakes-projects-0ab50f91
+# 프론트 (Vercel 프로젝트 rotconnector) — 평시엔 쓰지 않는다. git 연동이 끊겼을 때만.
+vercel --prod --yes
+# 위가 "Project not found" 면 스코프를 지정한다(팀 스코프의 프로젝트일 때)
+# vercel --prod --yes --scope jakes-projects-0ab50f91
 ```
-
-CI 배포(`.github/workflows/deploy.yml`)는 같은 이름·스코프로 `vercel link` 를 먼저 실행한다.
-필요 시크릿은 `CONVEX_DEPLOY_KEY`, `VERCEL_TOKEN` 두 개뿐 — 자세한 설정은 `DEPLOY.md` §0 참고.
 
 ## 모바일 (Capacitor) 다음 단계
 
