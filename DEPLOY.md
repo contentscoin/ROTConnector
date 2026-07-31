@@ -22,6 +22,7 @@ GitHub Actions 워크플로우가 자동 빌드와 배포를 처리합니다.
     커밋 없이 재배포할 때 사용한다.
 - **단계**: pnpm install → `npx convex deploy -y`(백엔드) → Vercel production deploy(프론트).
   프론트가 이번 릴리스에서 바뀐 Convex 쿼리 시그니처를 호출하므로 **백엔드가 항상 먼저** 올라간다.
+- **Vercel 프로젝트 연결은 ID가 아니라 이름 기반**이다(§0-1).
 - **동시 실행 방지**: `concurrency: production-deploy` 그룹. 진행 중인 배포는 취소하지 않고
   큐에 넣어 순서대로 실행한다(백엔드만 올라간 반쪽 상태를 만들지 않기 위해).
   마이그레이션 워크플로우도 같은 그룹이라 배포와 겹치지 않는다.
@@ -44,15 +45,47 @@ GitHub Actions 워크플로우가 자동 빌드와 배포를 처리합니다.
 | 시크릿 | 용도 | 사용 워크플로우 |
 | --- | --- | --- |
 | `CONVEX_DEPLOY_KEY` | Convex 프로덕션 배포 키 (Convex 대시보드 → Settings → Deploy Keys → Generate Production Deploy Key) | deploy, migrate |
-| `VERCEL_TOKEN` | Vercel 개인 액세스 토큰 (Vercel → Account Settings → Tokens) | deploy |
-| `VERCEL_ORG_ID` | Vercel 팀/조직 ID (`.vercel/project.json` 또는 팀 설정) | deploy |
-| `VERCEL_PROJECT_ID` | Vercel 프로젝트 ID (`.vercel/project.json`) | deploy |
+| `VERCEL_TOKEN` | Vercel 개인 액세스 토큰 (Vercel → Account Settings → Tokens). 대상 스코프에 접근 권한이 있어야 한다. | deploy |
+
+> `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` 시크릿은 **더 이상 필요 없다**(등록돼 있으면 지워도 된다).
+> 프로젝트 연결은 아래 §0-1의 이름 기반 방식으로 바뀌었다.
 
 > **참고**: 시크릿 미설정 시 수동 배포(아래 섹션 2, 4) 사용.
 
+### 0-1. Vercel 프로젝트 연결 (이름 기반, 시크릿 아님)
+
+불투명한 ID를 손으로 옮겨 적다 생기는 `Project not found` 오류를 없애기 위해,
+배포 워크플로우는 **프로젝트 이름 + 스코프 슬러그**로 프로젝트를 연결한다.
+두 값은 시크릿이 아니라 `.github/workflows/deploy.yml` 상단 `env:` 에 평문으로 있다.
+
+```yaml
+env:
+  VERCEL_PROJECT_NAME: rotconnector              # 프로젝트 이름
+  VERCEL_SCOPE_SLUG: jakes-projects-0ab50f91     # 스코프 슬러그 (hobby 계정도 발급됨)
+  VERCEL_CLI_VERSION: 58.4.4                     # CLI 버전 고정
+```
+
+워크플로우가 실행하는 순서:
+`vercel link --yes --project <이름> --scope <슬러그>` → `vercel pull` →
+`vercel build --prod` → `vercel deploy --prebuilt --prod`.
+`link`이 `.vercel/project.json`을 CLI 스스로 만들어 주므로 ID를 조립하지 않는다.
+
+**값이 틀렸을 때 고치는 법**: 시크릿을 건드리지 말고 위 `env:` 값을 수정해 커밋한다.
+정확한 값은 로컬에서 확인할 수 있고, 워크플로우도 **실패 시 자동으로 출력**한다
+(`Diagnose Vercel access (on failure)` 단계 — `vercel whoami` / `teams ls` /
+`project ls` 결과. 팀 슬러그와 프로젝트 이름은 시크릿이 아니라 로그에 그대로 찍힌다).
+
+```bash
+vercel teams ls                      # 접근 가능한 스코프 슬러그 목록 → VERCEL_SCOPE_SLUG
+vercel project ls --scope <슬러그>   # 그 스코프의 프로젝트 이름 목록 → VERCEL_PROJECT_NAME
+```
+
+- 목록에 원하는 스코프가 아예 없으면 → 토큰이 다른 계정 소속이다. `VERCEL_TOKEN` 재발급.
+- 스코프는 보이는데 프로젝트가 없으면 → 프로젝트 이름이 다르거나 다른 스코프에 있다.
+
 ### 최초 프로덕션 오픈 순서 (Actions만으로)
 
-1. 위 4개 시크릿 등록.
+1. 위 2개 시크릿 등록(`CONVEX_DEPLOY_KEY`, `VERCEL_TOKEN`) + §0-1의 프로젝트 이름·스코프 확인.
 2. PR을 `main`에 머지(또는 Actions 탭에서 `Deploy Production` 수동 실행) →
    Convex + Vercel 배포 완료.
 3. 기존 데이터가 있으면 `Run Convex Migration (production)` 으로 §2-1 백필 2회 실행
@@ -151,15 +184,15 @@ Actions: `migration: wipeDemoData`, `args` 비움, `confirm: WIPE` **직접 입�
 
 ## 4. 프론트엔드 배포 (Vercel)
 
-- 기본 경로는 **GitHub Actions**(`deploy.yml`의 Vercel 단계 —
+- 기본 경로는 **GitHub Actions**(`deploy.yml`의 Vercel 단계 — `vercel link`(이름 기반, §0-1) →
   `vercel pull` → `vercel build --prod` → `vercel deploy --prebuilt --prod`).
 - 로컬에서 직접 할 때는 **`vercel --prod` CLI**로 한다. 이 프로젝트는 Vercel의 git 연동
   자동 빌드가 아니다(main 푸시만으로는 Vercel 빌드가 트리거되지 않음 — `vercel ls`로 확인됨).
   ```
-  vercel --prod --yes
+  vercel --prod --yes --scope jakes-projects-0ab50f91
   ```
   → 프로덕션 별칭 `https://rotconnector.vercel.app` 로 alias.
-- Vercel 인증/링크는 이미 돼 있음(team jakes-projects, project rotconnector).
+- Vercel 인증/링크는 이미 돼 있음(스코프 `jakes-projects-0ab50f91`, 프로젝트 `rotconnector`).
 - SPA rewrite는 `vercel.json`에서 **확장자 없는 경로만** index.html로 보냄
   (`/((?!.*\.).*)`) — manifest/아이콘/정적 자산은 그대로 제공.
 
