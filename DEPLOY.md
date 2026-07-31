@@ -7,25 +7,53 @@
 
 ## 0. CI/CD 파이프라인
 
-GitHub Actions 워크플로우가 자동 빌드와 배포를 처리합니다.
+배포는 **두 갈래**다. 프론트엔드는 **Vercel git 연동**이, 백엔드(Convex)는
+**GitHub Actions**가 담당한다. 둘 다 `main` push로 트리거된다.
+
+| 대상 | 배포 주체 | 트리거 | 필요 시크릿 |
+| --- | --- | --- | --- |
+| 프론트(Vite SPA) | **Vercel** (대시보드 git 연동) | `main` push | 없음 (GitHub App 연결) |
+| 백엔드(Convex) | GitHub Actions `deploy.yml` | `main` push · 수동 실행 | `CONVEX_DEPLOY_KEY` |
 
 ### CI (`.github/workflows/ci.yml`)
 - **트리거**: `main` 브랜치 push 및 PR
 - **단계**: pnpm install -> lint -> type-check + build
 - PR 머지 전 빌드 성공 필수
 
-### 프로덕션 배포 (`.github/workflows/deploy.yml`)
+### 프론트엔드 배포 (Vercel git 연동)
+- **트리거**: `main` push → Vercel이 저장소를 클론해 스스로 빌드·배포한다.
+  GitHub Actions는 프론트를 **전혀 배포하지 않는다**(Vercel CLI 단계는 제거됨).
+- 빌드 설정은 저장소의 `vercel.json`을 그대로 따른다
+  (`framework: vite`, `buildCommand: pnpm build`, `outputDirectory: dist`, SPA rewrite, 보안 헤더/CSP).
+- 대시보드에서 **1회만** 해야 하는 연결 작업은 §0-1 참고.
+- 배포 로그·롤백은 Vercel 대시보드 → 프로젝트 `rotconnector` → Deployments 에서 본다.
+
+### 백엔드 배포 (`.github/workflows/deploy.yml`)
+- **워크플로우 이름**: `Deploy Production (backend / Convex)` (파일명은 그대로 `deploy.yml`).
 - **트리거**
   - `main` 브랜치 push (머지 시 자동 배포)
-  - **수동 실행**(`workflow_dispatch`): GitHub **Actions 탭 → Deploy Production →
-    Run workflow → 브랜치 `main` 선택 → Run**. 최초 오픈 배포, 실패한 배포 재시도,
-    커밋 없이 재배포할 때 사용한다.
-- **단계**: pnpm install → `npx convex deploy -y`(백엔드) → Vercel production deploy(프론트).
-  프론트가 이번 릴리스에서 바뀐 Convex 쿼리 시그니처를 호출하므로 **백엔드가 항상 먼저** 올라간다.
-- **Vercel 프로젝트 연결은 ID가 아니라 이름 기반**이다(§0-1).
-- **동시 실행 방지**: `concurrency: production-deploy` 그룹. 진행 중인 배포는 취소하지 않고
-  큐에 넣어 순서대로 실행한다(백엔드만 올라간 반쪽 상태를 만들지 않기 위해).
-  마이그레이션 워크플로우도 같은 그룹이라 배포와 겹치지 않는다.
+  - **수동 실행**(`workflow_dispatch`): GitHub **Actions 탭 →
+    Deploy Production (backend / Convex) → Run workflow → 브랜치 `main` 선택 → Run**.
+    최초 오픈 배포, 실패한 배포 재시도, 커밋 없이 재배포할 때 사용한다.
+    쿼리 시그니처가 깨지는 릴리스에서 **백엔드를 먼저** 올릴 때도 이 경로를 쓴다(아래 주의).
+- **단계**: pnpm install → `npx convex deploy -y`. 그 외 단계는 없다.
+- **동시 실행 방지**: `concurrency: production-deploy` 그룹. 진행 중인 실행은 취소하지 않고
+  큐에 넣어 순서대로 실행한다. 마이그레이션 워크플로우도 같은 그룹이라
+  Convex 배포와 마이그레이션이 절대 겹치지 않는다.
+
+> ### ⚠️ 배포 순서 주의 (git 연동으로 바뀌면서 생긴 유일한 트레이드오프)
+>
+> 예전에는 한 워크플로우가 Convex → Vercel 순서로 배포해 **백엔드 선행**이 보장됐다.
+> 이제 Convex(Actions)와 Vercel(git 연동)은 **서로 독립적으로** 시작하므로 순서가 강제되지 않는다.
+> Convex 쿼리/뮤테이션 **시그니처가 바뀌는 릴리스**에서는 새 프론트가 잠깐(보통 수십 초)
+> 구 백엔드를 호출할 수 있다.
+>
+> 실무 대응:
+> 1. 보통 릴리스(시그니처 호환) — 그냥 머지하고 Convex 워크플로우가 끝나는지만 확인한다.
+> 2. **시그니처가 깨지는 릴리스** — 프론트 변경을 `main`에 올리기 **전에**
+>    Actions 탭에서 `Deploy Production (backend / Convex)` 를 `workflow_dispatch` 로 먼저 돌려
+>    백엔드를 배포하고, 그다음 프론트 커밋을 push 한다.
+> 3. 되돌릴 땐 Vercel 대시보드에서 이전 배포로 **Instant Rollback** 하는 게 가장 빠르다.
 
 ### 프로덕션 마이그레이션 (`.github/workflows/migrate-production.yml`)
 - **트리거**: **수동 실행 전용**(`workflow_dispatch`). push/merge로는 절대 실행되지 않는다 —
@@ -45,49 +73,68 @@ GitHub Actions 워크플로우가 자동 빌드와 배포를 처리합니다.
 | 시크릿 | 용도 | 사용 워크플로우 |
 | --- | --- | --- |
 | `CONVEX_DEPLOY_KEY` | Convex 프로덕션 배포 키 (Convex 대시보드 → Settings → Deploy Keys → Generate Production Deploy Key) | deploy, migrate |
-| `VERCEL_TOKEN` | Vercel 개인 액세스 토큰 (Vercel → Account Settings → Tokens). 대상 스코프에 접근 권한이 있어야 한다. | deploy |
 
-> `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` 시크릿은 **더 이상 필요 없다**(등록돼 있으면 지워도 된다).
-> 프로젝트 연결은 아래 §0-1의 이름 기반 방식으로 바뀌었다.
+**이제 필요한 GitHub 시크릿은 `CONVEX_DEPLOY_KEY` 하나뿐이다.**
 
-> **참고**: 시크릿 미설정 시 수동 배포(아래 섹션 2, 4) 사용.
+> `VERCEL_TOKEN` · `VERCEL_ORG_ID` · `VERCEL_PROJECT_ID` 세 시크릿은 **더 이상 어떤 워크플로우도
+> 참조하지 않는다. 저장소 시크릿에서 지워도 된다**(남겨 둬도 무해하지만 지우는 편이 깔끔하다).
+> Vercel은 git 연동으로 스스로 빌드하므로 CI가 Vercel 토큰을 들고 있을 이유가 없다.
 
-### 0-1. Vercel 프로젝트 연결 (이름 기반, 시크릿 아님)
+> **참고**: `CONVEX_DEPLOY_KEY` 미설정 시 백엔드는 로컬 수동 배포(§2)로 올린다.
 
-불투명한 ID를 손으로 옮겨 적다 생기는 `Project not found` 오류를 없애기 위해,
-배포 워크플로우는 **프로젝트 이름 + 스코프 슬러그**로 프로젝트를 연결한다.
-두 값은 시크릿이 아니라 `.github/workflows/deploy.yml` 상단 `env:` 에 평문으로 있다.
+### 0-1. Vercel git 연동 — 운영자가 대시보드에서 1회만 하는 설정
 
-```yaml
-env:
-  VERCEL_PROJECT_NAME: rotconnector              # 프로젝트 이름
-  VERCEL_SCOPE_SLUG: jakes-projects-0ab50f91     # 스코프 슬러그 (hobby 계정도 발급됨)
-  VERCEL_CLI_VERSION: 58.4.4                     # CLI 버전 고정
-```
+프론트 배포 주체는 Vercel이다. 아래는 **한 번만** 하면 되는 작업이다.
 
-워크플로우가 실행하는 순서:
-`vercel link --yes --project <이름> --scope <슬러그>` → `vercel pull` →
-`vercel build --prod` → `vercel deploy --prebuilt --prod`.
-`link`이 `.vercel/project.json`을 CLI 스스로 만들어 주므로 ID를 조립하지 않는다.
+1. **Vercel 대시보드 → 프로젝트 `rotconnector` → Settings → Git**
+   → **Connect Git Repository** → GitHub → `contentscoin/ROTConnector` 선택.
+   (Vercel GitHub App 설치 권한 요청이 뜨면 해당 저장소에 접근을 허용한다.
+   새 프로젝트를 만들지 말고 **기존 `rotconnector` 프로젝트에 연결**해야
+   프로덕션 도메인 `https://rotconnector.vercel.app` 이 그대로 유지된다.)
+2. 같은 화면에서 **Production Branch = `main`** 으로 지정.
+   (`main` 외 브랜치 push·PR은 Preview 배포가 된다. Preview가 필요 없으면
+   Settings → Git → *Ignored Build Step* 이나 브랜치 설정으로 끌 수 있다.)
+3. **Settings → Build & Deployment** 에서 저장소 `vercel.json` 과 일치하는지 확인.
+   `vercel.json` 이 있는 값은 대시보드보다 우선하므로 **비워 두는 것이 정답**이다.
+   | 항목 | 기대값 | 출처 |
+   | --- | --- | --- |
+   | Framework Preset | Vite | `vercel.json` `framework` |
+   | Build Command | `pnpm build` | `vercel.json` `buildCommand` |
+   | Output Directory | `dist` | `vercel.json` `outputDirectory` |
+   | Install Command | (기본값 = 자동) | `pnpm-lock.yaml`(lockfileVersion 9.0)로 pnpm 9 자동 선택 |
+   | Root Directory | (비움 = 저장소 루트) | — |
+   | Node.js Version | **22.x** | 로컬/CI와 동일하게 맞춘다 |
+4. **환경변수는 설정할 필요가 없다.** `VITE_CONVEX_URL` 은 커밋된 `.env.production`
+   (`https://robust-ostrich-0.convex.cloud`)에 있고, `vite build` 는 기본 모드가 `production`
+   이라 이 파일을 자동으로 읽어 번들에 인라인한다. Convex 클라이언트 URL은 공개값이다.
+   - 선택 항목만 대시보드 환경변수가 필요할 수 있다: `VITE_SENTRY_DSN`(§7),
+     `VITE_FIREBASE_*` 5개(§8). 지금은 `.env.production` 에서 주석 처리돼 있어 미설정 상태이며,
+     `.env.production` 에 채우든 Vercel 환경변수(Production)에 넣든 결과는 같다
+     (둘 다 빌드 타임 주입, 대시보드 값이 `.env.production` 값보다 우선).
+5. 확인: `main` 에 아무 커밋이나 push → Vercel Deployments 에 새 Production 배포가
+   자동으로 뜨고 `https://rotconnector.vercel.app` 이 갱신되는지 본다. → §5 스모크 테스트.
 
-**값이 틀렸을 때 고치는 법**: 시크릿을 건드리지 말고 위 `env:` 값을 수정해 커밋한다.
-정확한 값은 로컬에서 확인할 수 있고, 워크플로우도 **실패 시 자동으로 출력**한다
-(`Diagnose Vercel access (on failure)` 단계 — `vercel whoami` / `teams ls` /
-`project ls` 결과. 팀 슬러그와 프로젝트 이름은 시크릿이 아니라 로그에 그대로 찍힌다).
+> 로컬 CLI(`vercel --prod`)는 **비상용 우회로**로만 남긴다(§4). 평시엔 쓰지 않는다.
 
-```bash
-vercel teams ls                      # 접근 가능한 스코프 슬러그 목록 → VERCEL_SCOPE_SLUG
-vercel project ls --scope <슬러그>   # 그 스코프의 프로젝트 이름 목록 → VERCEL_PROJECT_NAME
-```
+<details>
+<summary>(폐기) 이전 CLI 배포 방식 — VERCEL_PROJECT_NAME / VERCEL_SCOPE_SLUG / 접근 진단</summary>
 
-- 목록에 원하는 스코프가 아예 없으면 → 토큰이 다른 계정 소속이다. `VERCEL_TOKEN` 재발급.
-- 스코프는 보이는데 프로젝트가 없으면 → 프로젝트 이름이 다르거나 다른 스코프에 있다.
+`deploy.yml` 이 `vercel link` → `pull` → `build --prod` → `deploy --prebuilt --prod` 로
+프론트를 직접 배포하던 방식은 **폐기됐다**. 프로젝트 이름·스코프 슬러그를 CI에서 맞추는 문제로
+연속 실패했고, 그 원인을 없애기 위해 git 연동으로 전환했다.
+`VERCEL_PROJECT_NAME` / `VERCEL_SCOPE_SLUG` / `VERCEL_CLI_VERSION` 워크플로우 `env:` 와
+`Diagnose Vercel access` 단계(`vercel whoami` / `teams ls` / `project ls`)는 모두 제거됐다.
+git 연동을 쓰는 한 이 설정들은 다시 필요하지 않다.
 
-### 최초 프로덕션 오픈 순서 (Actions만으로)
+</details>
 
-1. 위 2개 시크릿 등록(`CONVEX_DEPLOY_KEY`, `VERCEL_TOKEN`) + §0-1의 프로젝트 이름·스코프 확인.
-2. PR을 `main`에 머지(또는 Actions 탭에서 `Deploy Production` 수동 실행) →
-   Convex + Vercel 배포 완료.
+### 최초 프로덕션 오픈 순서
+
+1. `CONVEX_DEPLOY_KEY` 시크릿 등록 + §0-1의 Vercel git 연동 1회 설정.
+2. PR을 `main`에 머지 →
+   Actions 의 `Deploy Production (backend / Convex)` 가 Convex를 배포하고,
+   Vercel이 같은 push로 프론트를 배포한다.
+   (커밋 없이 백엔드만 다시 올리려면 Actions 탭에서 수동 실행.)
 3. 기존 데이터가 있으면 `Run Convex Migration (production)` 으로 §2-1 백필 2회 실행
    (`backfillSearchText` → `rebuildRollups` + `confirm: REBUILD`).
    빈 prod면 건너뛴다.
@@ -105,8 +152,8 @@ vercel project ls --scope <슬러그>   # 그 스코프의 프로젝트 이름 �
 
 ## 2. Convex 프로덕션 배포
 
-**권장 경로는 GitHub Actions**(§0) — `Deploy Production` 워크플로우가 Convex 배포와
-Vercel 배포를 순서대로 처리한다. 아래는 로컬에서 직접 배포할 때의 동등한 명령이다.
+**권장 경로는 GitHub Actions**(§0) — `Deploy Production (backend / Convex)` 워크플로우가
+`main` push마다 Convex를 배포한다. 아래는 로컬에서 직접 배포할 때의 동등한 명령이다.
 
 ```bash
 npx convex deploy            # 함수 + 스키마를 prod에 배포 (CI에서는 -y로 프롬프트 생략)
@@ -182,17 +229,20 @@ Actions: `migration: wipeDemoData`, `args` 비움, `confirm: WIPE` **직접 입�
 
 > **prod에서 `seed:run` 실행 금지** — 데모 회원 13명·샘플 데이터를 만든다. 시드는 dev 전용.
 
-## 4. 프론트엔드 배포 (Vercel)
+## 4. 프론트엔드 배포 (Vercel git 연동)
 
-- 기본 경로는 **GitHub Actions**(`deploy.yml`의 Vercel 단계 — `vercel link`(이름 기반, §0-1) →
-  `vercel pull` → `vercel build --prod` → `vercel deploy --prebuilt --prod`).
-- 로컬에서 직접 할 때는 **`vercel --prod` CLI**로 한다. 이 프로젝트는 Vercel의 git 연동
-  자동 빌드가 아니다(main 푸시만으로는 Vercel 빌드가 트리거되지 않음 — `vercel ls`로 확인됨).
+- **기본 경로: `main` push → Vercel이 자동 배포.** 사람이 실행할 명령은 없다.
+  대시보드 1회 설정은 §0-1, 배포 순서 주의는 §0 의 경고 박스 참고.
+- Vercel은 저장소를 클론해 `pnpm install` → `pnpm build`(= `tsc -b && vite build`) 를 돌리고
+  `dist` 를 서빙한다. 로컬 `pnpm build` 와 같은 명령·같은 lockfile·같은 `.env.production` 이므로
+  결과물이 로컬 빌드와 동일하다(CI의 `--prebuilt` 업로드 경로는 더 이상 쓰지 않는다).
+- `VITE_CONVEX_URL` 은 커밋된 `.env.production` 에서 온다 — Vercel 환경변수 설정 불필요(§0-1 4번).
+- **비상용 우회로**(git 연동이 끊겼거나 대시보드 빌드가 막혔을 때만):
   ```
-  vercel --prod --yes --scope jakes-projects-0ab50f91
+  vercel --prod --yes                                    # 개인 계정 기본 스코프
+  vercel --prod --yes --scope jakes-projects-0ab50f91    # 위가 "Project not found" 면 스코프 지정
   ```
   → 프로덕션 별칭 `https://rotconnector.vercel.app` 로 alias.
-- Vercel 인증/링크는 이미 돼 있음(스코프 `jakes-projects-0ab50f91`, 프로젝트 `rotconnector`).
 - SPA rewrite는 `vercel.json`에서 **확장자 없는 경로만** index.html로 보냄
   (`/((?!.*\.).*)`) — manifest/아이콘/정적 자산은 그대로 제공.
 
@@ -260,7 +310,8 @@ npx cap open ios     # / android
 3. **서버 비밀(서비스 계정)** 을 Convex 환경변수로(파일/깃 금지):
    - Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → 새 비공개 키 생성(JSON).
    - `npx convex env set FCM_SERVICE_ACCOUNT "$(cat service-account.json)"`
-4. 재배포(`npx convex deploy` + Vercel). 회원이 `/notifications`의 **"브라우저 푸시 알림 켜기"** 로 권한 허용 → 디바이스 토큰이 `pushTokens`에 등록됨.
+4. 재배포(백엔드: `main` push로 Actions 워크플로우 / 프론트: 같은 push로 Vercel 자동 빌드).
+   회원이 `/notifications`의 **"브라우저 푸시 알림 켜기"** 로 권한 허용 → 디바이스 토큰이 `pushTokens`에 등록됨.
 
 - 인앱 알림 8종 전부 푸시로도 전달된다(교류·매칭·도움요청·행사·가입승인).
 - 무효/만료 토큰은 발송 시 자동 정리(404/400).

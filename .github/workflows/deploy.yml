@@ -1,35 +1,25 @@
-name: Deploy Production
+name: Deploy Production (backend / Convex)
 
 on:
   push:
     branches: [main]
-  # 수동 실행: 최초 오픈 배포, 실패한 배포 재시도, 커밋 없이 재배포할 때 사용
+  # 수동 실행: 최초 오픈 배포, 실패한 배포 재시도, 커밋 없이 재배포할 때 사용.
+  # 쿼리 시그니처가 바뀌는 릴리스에서는 프론트 커밋을 push 하기 전에 여기서 먼저 백엔드를 올린다.
   workflow_dispatch:
 
 # Required secrets (configure in GitHub repo Settings > Secrets and variables > Actions):
-#   CONVEX_DEPLOY_KEY   - Convex production deploy key
-#   VERCEL_TOKEN        - Vercel personal access token (해당 스코프 접근 권한 필요)
+#   CONVEX_DEPLOY_KEY   - Convex production deploy key (이 워크플로우가 쓰는 유일한 시크릿)
 #
-# VERCEL_ORG_ID / VERCEL_PROJECT_ID 시크릿은 더 이상 쓰지 않는다.
-# 손으로 옮겨 적어야 하는 불투명한 ID 대신, 사람이 읽고 검증할 수 있는
-# "프로젝트 이름 + 스코프 슬러그"(아래 env)로 프로젝트를 연결한다.
+# 프론트엔드(Vercel)는 이 워크플로우가 배포하지 않는다. Vercel 대시보드의 GitHub git 연동이
+# `main` push마다 스스로 빌드·배포한다(DEPLOY.md §0-1). 따라서 VERCEL_TOKEN /
+# VERCEL_ORG_ID / VERCEL_PROJECT_ID 시크릿은 더 이상 쓰지 않으며 저장소에서 지워도 된다.
 
-# 프로덕션 배포는 절대 동시에 돌지 않는다. 진행 중인 배포는 취소하지 않고(백엔드만
-# 올라간 반쪽 상태를 만들지 않기 위해) 큐에 넣어 순서대로 실행한다.
-# migrate-production.yml도 같은 그룹을 써서 배포와 마이그레이션이 겹치지 않는다.
+# 프로덕션 배포는 절대 동시에 돌지 않는다. 진행 중인 배포는 취소하지 않고 큐에 넣어
+# 순서대로 실행한다. migrate-production.yml도 같은 그룹을 써서
+# Convex 배포와 마이그레이션이 겹치지 않는다.
 concurrency:
   group: production-deploy
   cancel-in-progress: false
-
-# 시크릿이 아니다 — 값이 틀렸으면 시크릿을 건드리지 말고 이 파일에서 바로 고친다.
-#   VERCEL_PROJECT_NAME : Vercel 프로젝트 이름 (대시보드 프로젝트 URL 마지막 조각)
-#   VERCEL_SCOPE_SLUG   : Vercel 스코프 슬러그 (대시보드 URL의 /<slug> — hobby 계정도 발급됨)
-#   VERCEL_CLI_VERSION  : CLI 버전 고정 (npx가 매번 최신을 끌어와 동작이 바뀌는 것을 방지)
-# 확인 방법: `vercel teams ls` / `vercel project ls` (아래 실패 진단 단계가 자동 출력)
-env:
-  VERCEL_PROJECT_NAME: rotconnector
-  VERCEL_SCOPE_SLUG: jakes-projects-0ab50f91
-  VERCEL_CLI_VERSION: 58.4.4
 
 jobs:
   deploy:
@@ -53,54 +43,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # 백엔드 먼저. 이 브랜치에서 쿼리 시그니처가 바뀌었으므로 프론트보다 반드시 선행.
       # -y: 확인 프롬프트를 건너뛴다 (CI가 입력을 기다리며 멈추지 않게).
       - name: Deploy Convex functions
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: npx convex deploy -y
-
-      # `vercel link`으로 이름 기반 연결을 먼저 만든다. CLI가 .vercel/project.json을
-      # 직접 써 주므로 ID를 손으로 조립하지 않는다.
-      # 주의: VERCEL_ORG_ID / VERCEL_PROJECT_ID 환경변수를 이 단계에 넣으면 CLI가
-      # 이름 기반 링크보다 그 값을 우선하므로 절대 넣지 않는다.
-      # `--team`은 58.x에서 deprecated 경고가 나므로 `--scope`를 쓴다.
-      - name: Deploy to Vercel (production)
-        id: vercel_deploy
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          set -euo pipefail
-          vc="npx --yes vercel@${VERCEL_CLI_VERSION}"
-          # 시도한 값을 로그에 남긴다(둘 다 시크릿이 아니므로 마스킹되지 않고 그대로 보인다).
-          echo "project=${VERCEL_PROJECT_NAME} scope=${VERCEL_SCOPE_SLUG} cli=${VERCEL_CLI_VERSION}"
-          $vc link --yes \
-            --project "$VERCEL_PROJECT_NAME" \
-            --scope "$VERCEL_SCOPE_SLUG" \
-            --token="$VERCEL_TOKEN"
-          $vc pull --yes --environment=production \
-            --scope "$VERCEL_SCOPE_SLUG" --token="$VERCEL_TOKEN"
-          $vc build --prod --scope "$VERCEL_SCOPE_SLUG" --token="$VERCEL_TOKEN"
-          $vc deploy --prebuilt --prod \
-            --scope "$VERCEL_SCOPE_SLUG" --token="$VERCEL_TOKEN"
-
-      # 실패했을 때만 실행. 토큰이 "실제로 무엇을 볼 수 있는지"를 출력해
-      # 스코프 슬러그·프로젝트 이름이 틀렸는지 즉시 판별한다.
-      # 출력되는 팀 슬러그/프로젝트 이름은 시크릿이 아니다.
-      # 시크릿 값 자체는 절대 출력하지 않는다(환경 전체 덤프 금지).
-      - name: Diagnose Vercel access (on failure)
-        if: failure() && steps.vercel_deploy.outcome == 'failure'
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          vc="npx --yes vercel@${VERCEL_CLI_VERSION}"
-          echo "::group::vercel whoami (토큰이 속한 계정)"
-          $vc whoami --token="$VERCEL_TOKEN" || true
-          echo "::endgroup::"
-          echo "::group::vercel teams ls (토큰이 접근 가능한 스코프 슬러그 목록)"
-          $vc teams ls --token="$VERCEL_TOKEN" || true
-          echo "::endgroup::"
-          echo "::group::vercel project ls --scope $VERCEL_SCOPE_SLUG (해당 스코프의 프로젝트 이름 목록)"
-          $vc project ls --scope "$VERCEL_SCOPE_SLUG" --token="$VERCEL_TOKEN" || true
-          echo "::endgroup::"
-          echo "::notice::위 목록에 나온 스코프 슬러그를 deploy.yml 의 VERCEL_SCOPE_SLUG 에, 프로젝트 이름을 VERCEL_PROJECT_NAME 에 그대로 넣으세요. 목록이 아예 비었거나 토큰 오류가 나면 VERCEL_TOKEN 시크릿을 재발급해야 합니다."
