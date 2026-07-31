@@ -38,11 +38,15 @@ pnpm dev            # 프론트(localhost:5173)
 # 백엔드 (Convex 프로덕션: robust-ostrich-0)
 npx convex deploy -y
 
-# 프론트 (Vercel 프로덕션: 스코프 jakes-projects-0ab50f91 / 프로젝트 rotconnector)
-vercel --prod --yes --scope jakes-projects-0ab50f91
+# 프론트 (Vercel 프로덕션: 프로젝트 rotconnector)
+vercel --prod --yes
+# 위가 "Project not found" 면 스코프를 지정한다(팀 스코프의 프로젝트일 때)
+# vercel --prod --yes --scope jakes-projects-0ab50f91
 ```
 
-CI 배포(`.github/workflows/deploy.yml`)는 같은 이름·스코프로 `vercel link` 를 먼저 실행한다.
+CI 배포(`.github/workflows/deploy.yml`)는 프로젝트 **이름**으로 `vercel link` 를 먼저 실행하고,
+`--scope` 없이 먼저 시도한 뒤 실패하면 스코프를 붙여 재시도한다. 매 실행마다
+`vercel whoami` / `teams ls` / `project ls` 결과를 로그에 출력해 값이 틀렸으면 바로 알 수 있다.
 필요 시크릿은 `CONVEX_DEPLOY_KEY`, `VERCEL_TOKEN` 두 개뿐 — 자세한 설정은 `DEPLOY.md` §0 참고.
 
 ## 모바일 (Capacitor) 다음 단계
