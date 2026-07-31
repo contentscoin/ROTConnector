@@ -103,7 +103,14 @@
    | Output Directory | `dist` | `vercel.json` `outputDirectory` |
    | Install Command | (기본값 = 자동) | `pnpm-lock.yaml`(lockfileVersion 9.0)로 pnpm 9 자동 선택 |
    | Root Directory | (비움 = 저장소 루트) | — |
-   | Node.js Version | **22.x** | 로컬/CI와 동일하게 맞춘다 |
+   | Node.js Version | **22.x** (대시보드에서 건드릴 필요 없음) | `package.json` `engines.node` |
+
+   > Node 버전은 이제 저장소에 고정돼 있다. `package.json` 의 `"engines": { "node": "22.x" }`
+   > 가 **대시보드 Project Settings 값보다 우선**하므로(불일치 시 Vercel 빌드 로그에
+   > `the Node.js Version defined in your Project Settings ... will not apply` 경고가 뜬다),
+   > 워크플로우 3개(`node-version: 22`)·로컬·Vercel 이 갈라질 수 없다.
+   > 로컬은 `.nvmrc`(`22`)를 두었으니 `nvm use` / `fnm use` 로 맞추면 된다.
+   > 단 **Vercel 은 `.nvmrc` 를 읽지 않는다** — Vercel 쪽 근거는 `engines.node` 뿐이다.
 4. **환경변수는 설정할 필요가 없다.** `VITE_CONVEX_URL` 은 커밋된 `.env.production`
    (`https://robust-ostrich-0.convex.cloud`)에 있고, `vite build` 는 기본 모드가 `production`
    이라 이 파일을 자동으로 읽어 번들에 인라인한다. Convex 클라이언트 URL은 공개값이다.
