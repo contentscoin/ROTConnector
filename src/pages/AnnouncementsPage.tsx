@@ -3,6 +3,7 @@ import { useMutation, usePaginatedQuery, useQuery } from 'convex/react'
 import type { FunctionReturnType } from 'convex/server'
 import { Megaphone, Pin, Plus } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
+import { paginatedApi } from '../lib/paginatedApi'
 import { useSession } from '../lib/session'
 import {
   Badge,
@@ -61,7 +62,7 @@ export function AnnouncementsPage() {
     status,
     loadMore,
   } = usePaginatedQuery(
-    api.announcements.list,
+    paginatedApi.announcementsList,
     { category: category ?? undefined },
     { initialNumItems: PAGE_SIZE },
   )
@@ -134,8 +135,9 @@ export function AnnouncementsPage() {
   )
 }
 
-type AnnouncementItem =
-  FunctionReturnType<typeof api.announcements.list>['page'][number]
+type AnnouncementListResult = FunctionReturnType<typeof api.announcements.list>
+type PaginatedAnnouncements = Extract<AnnouncementListResult, { page: unknown }>
+type AnnouncementItem = PaginatedAnnouncements['page'][number]
 
 function AnnouncementCard({ item }: { item: AnnouncementItem }) {
   const [expanded, setExpanded] = useState(false)

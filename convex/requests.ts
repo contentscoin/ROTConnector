@@ -7,6 +7,7 @@ import { requestStatus } from './schema'
 import { memberFromToken, requireMember } from './auth'
 import { buildRequestSearchText, normalizeTags } from './util'
 import { applyRequestDelta, topFacets } from './rollup'
+import { isLegacyList, legacyTake } from './lib/legacyList'
 
 // 태그 자동완성으로 노출할 빈도 상위 개수
 const TAG_SUGGESTIONS = 15
@@ -49,51 +50,53 @@ async function refreshRequestSearch(
  */
 export const list = query({
   args: {
-    paginationOpts: paginationOptsValidator,
+    // optional: 구 번들(useQuery)은 paginationOpts 없이 호출한다 → 배열 반환
+    paginationOpts: v.optional(paginationOptsValidator),
     status: v.optional(requestStatus),
     category: v.optional(v.string()),
     q: v.optional(v.string()),
   },
   handler: async (ctx, { paginationOpts, status, category, q }) => {
     const needle = q?.trim()
-    let result
-    if (needle) {
-      result = await ctx.db
-        .query('requests')
-        .withSearchIndex('search_text', (s) => {
+    const legacy = isLegacyList(paginationOpts)
+
+    const buildBase = () => {
+      if (needle) {
+        return ctx.db.query('requests').withSearchIndex('search_text', (s) => {
           let b = s.search('searchText', needle)
           if (status) b = b.eq('status', status)
           if (category) b = b.eq('category', category)
           return b
         })
-        .paginate(paginationOpts)
-    } else if (status) {
-      result = await ctx.db
-        .query('requests')
-        .withIndex('by_status', (qq) => qq.eq('status', status))
-        .order('desc')
-        .paginate(paginationOpts)
-    } else if (category) {
-      result = await ctx.db
-        .query('requests')
-        .withIndex('by_category', (qq) => qq.eq('category', category))
-        .order('desc')
-        .paginate(paginationOpts)
-    } else {
-      result = await ctx.db.query('requests').order('desc').paginate(paginationOpts)
+      }
+      if (status) {
+        return ctx.db
+          .query('requests')
+          .withIndex('by_status', (qq) => qq.eq('status', status))
+          .order('desc')
+      }
+      if (category) {
+        return ctx.db
+          .query('requests')
+          .withIndex('by_category', (qq) => qq.eq('category', category))
+          .order('desc')
+      }
+      return ctx.db.query('requests').order('desc')
     }
 
-    let page = result.page
-    if (status && needle) page = page.filter((r) => r.status === status)
-    if (category && !needle) page = page.filter((r) => r.category === category)
+    const refine = (page: Doc<'requests'>[]) => {
+      let rows = page
+      if (status && needle) rows = rows.filter((r) => r.status === status)
+      if (category && !needle) rows = rows.filter((r) => r.category === category)
+      return rows
+    }
 
-    const withAuthors = await Promise.all(
-      page.map(async (r) => ({ r, author: await ctx.db.get(r.authorId) })),
-    )
-    return {
-      ...result,
+    const enrich = async (page: Doc<'requests'>[]) => {
+      const withAuthors = await Promise.all(
+        page.map(async (r) => ({ r, author: await ctx.db.get(r.authorId) })),
+      )
       // 정지·미승인 작성자 글은 디렉토리와 동일하게 제외
-      page: withAuthors
+      return withAuthors
         .filter(({ author }) => author?.status === 'active')
         .map(({ r, author }) => ({
           ...r,
@@ -105,8 +108,16 @@ export const list = query({
                 cohort: author.cohort,
               }
             : null,
-        })),
+        }))
     }
+
+    if (legacy) {
+      const rows = refine(await buildBase().take(legacyTake()))
+      return await enrich(rows)
+    }
+
+    const result = await buildBase().paginate(paginationOpts)
+    return { ...result, page: await enrich(refine(result.page)) }
   },
 })
 

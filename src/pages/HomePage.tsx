@@ -13,6 +13,7 @@ import {
   Megaphone,
 } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
+import { paginatedApi } from '../lib/paginatedApi'
 import { Badge, Card, Spinner, SectionHeader, StatCard } from '../components/ui'
 import { RequestCard, MemberCard } from '../components/cards'
 import { formatCohort, formatDate, timeAgo } from '../lib/format'
@@ -30,13 +31,13 @@ export function HomePage() {
   const { token, member } = useSession()
   // 홈은 미리보기 카드만 필요하므로 첫 페이지만 작게 받는다 (전체 로드 없음).
   const { results: requests } = usePaginatedQuery(
-    api.requests.list,
+    paginatedApi.requestsList,
     {},
     { initialNumItems: 8 },
   )
   const leaders = useQuery(api.contributions.leaderboard, { limit: 5 })
   const { results: events } = usePaginatedQuery(
-    api.events.list,
+    paginatedApi.eventsList,
     {},
     { initialNumItems: 6 },
   )
@@ -49,7 +50,7 @@ export function HomePage() {
   // 고정글은 별도 쿼리라(단일 인덱스로 '고정 우선 + 최신순'이 불가) 여기서 앞에 붙인다.
   const pinnedAnnouncements = useQuery(api.announcements.pinned, {})
   const { results: latestAnnouncements } = usePaginatedQuery(
-    api.announcements.list,
+    paginatedApi.announcementsList,
     {},
     { initialNumItems: 2 },
   )

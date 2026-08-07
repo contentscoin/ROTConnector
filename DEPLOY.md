@@ -54,6 +54,10 @@
 >    Actions 탭에서 `Deploy Production (backend / Convex)` 를 `workflow_dispatch` 로 먼저 돌려
 >    백엔드를 배포하고, 그다음 프론트 커밋을 push 한다.
 > 3. 되돌릴 땐 Vercel 대시보드에서 이전 배포로 **Instant Rollback** 하는 게 가장 빠르다.
+> 4. **반대 방향 스큐(백엔드만 새 시그니처, 프론트 구 번들)** 도 위험하다. Vercel 배포가
+>    실패·누락되면 홈이 `CONVEX Q(...:list) Server Error` → ErrorBoundary로 죽는다.
+>    `requests`/`events`/`members`/`announcements` 의 `list` 는 paginationOpts 없이
+>    호출되면 구 배열 응답으로 폴백한다(레거시 번들 호환). 근본 해결은 프론트 재배포.
 
 ### 프로덕션 마이그레이션 (`.github/workflows/migrate-production.yml`)
 - **트리거**: **수동 실행 전용**(`workflow_dispatch`). push/merge로는 절대 실행되지 않는다 —
@@ -103,7 +107,14 @@
    | Output Directory | `dist` | `vercel.json` `outputDirectory` |
    | Install Command | (기본값 = 자동) | `pnpm-lock.yaml`(lockfileVersion 9.0)로 pnpm 9 자동 선택 |
    | Root Directory | (비움 = 저장소 루트) | — |
-   | Node.js Version | **22.x** | 로컬/CI와 동일하게 맞춘다 |
+   | Node.js Version | **22.x** (대시보드에서 건드릴 필요 없음) | `package.json` `engines.node` |
+
+   > Node 버전은 이제 저장소에 고정돼 있다. `package.json` 의 `"engines": { "node": "22.x" }`
+   > 가 **대시보드 Project Settings 값보다 우선**하므로(불일치 시 Vercel 빌드 로그에
+   > `the Node.js Version defined in your Project Settings ... will not apply` 경고가 뜬다),
+   > 워크플로우 3개(`node-version: 22`)·로컬·Vercel 이 갈라질 수 없다.
+   > 로컬은 `.nvmrc`(`22`)를 두었으니 `nvm use` / `fnm use` 로 맞추면 된다.
+   > 단 **Vercel 은 `.nvmrc` 를 읽지 않는다** — Vercel 쪽 근거는 `engines.node` 뿐이다.
 4. **환경변수는 설정할 필요가 없다.** `VITE_CONVEX_URL` 은 커밋된 `.env.production`
    (`https://robust-ostrich-0.convex.cloud`)에 있고, `vite build` 는 기본 모드가 `production`
    이라 이 파일을 자동으로 읽어 번들에 인라인한다. Convex 클라이언트 URL은 공개값이다.

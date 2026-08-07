@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
+import { paginatedApi } from '../lib/paginatedApi'
 import type { Id } from '../../convex/_generated/dataModel'
 import {
   Badge,
@@ -63,7 +64,7 @@ export function EventsPage() {
     status: pageStatus,
     loadMore,
   } = usePaginatedQuery(
-    api.events.list,
+    paginatedApi.eventsList,
     {
       ...(filter === 'all' ? {} : { kind: filter }),
       ...(token ? { token } : {}),

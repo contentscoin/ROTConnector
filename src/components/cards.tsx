@@ -15,9 +15,10 @@ import {
 import { cn } from '../lib/utils'
 
 // 공개 디렉토리 projection 타입 (phone 등 비공개 필드 제외).
-// members.list는 커서 페이지네이션이라 한 페이지(page)의 항목 타입을 쓴다.
-export type PublicMember =
-  FunctionReturnType<typeof api.members.list>['page'][number]
+// members.list는 레거시(배열) / 페이지네이션 유니온 — page 항목 타입을 쓴다.
+type MembersListResult = FunctionReturnType<typeof api.members.list>
+type PaginatedMembers = Extract<MembersListResult, { page: unknown }>
+export type PublicMember = PaginatedMembers['page'][number]
 
 type Author = {
   _id: Id<'members'>

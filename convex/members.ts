@@ -20,6 +20,7 @@ import {
 } from './rollup'
 import { recordAudit } from './audit'
 import { createNotification } from './notify'
+import { isLegacyList, legacyTake } from './lib/legacyList'
 
 function normalizePhone(phone: string): string {
   return phone.replace(/[^0-9]/g, '')
@@ -104,7 +105,8 @@ function assertSafeLinks(links: { label: string; url: string }[]) {
  */
 export const list = query({
   args: {
-    paginationOpts: paginationOptsValidator,
+    // optional: 구 번들(useQuery)은 paginationOpts 없이 호출한다 → 배열 반환
+    paginationOpts: v.optional(paginationOptsValidator),
     q: v.optional(v.string()),
     industry: v.optional(v.string()),
     region: v.optional(v.string()),
@@ -118,61 +120,67 @@ export const list = query({
     const needle = args.q?.trim()
     // 자유 텍스트가 없어도 태그 필터가 있으면 태그를 검색어로 사용
     const searchTerm = needle || industry || helpOffer || undefined
+    const legacy = isLegacyList(paginationOpts)
 
-    let result
-    if (searchTerm) {
-      result = await ctx.db
-        .query('members')
-        .withSearchIndex('search_text', (s) => {
+    const buildBase = () => {
+      if (searchTerm) {
+        return ctx.db.query('members').withSearchIndex('search_text', (s) => {
           let b = s.search('searchText', searchTerm).eq('status', 'active')
           if (region) b = b.eq('region', region)
           if (cohort) b = b.eq('cohort', cohort)
           if (university) b = b.eq('university', university)
           return b
         })
-        .paginate(paginationOpts)
-    } else if (region) {
-      result = await ctx.db
-        .query('members')
-        .withIndex('by_status_region', (q) =>
-          q.eq('status', 'active').eq('region', region),
-        )
-        .order('desc')
-        .paginate(paginationOpts)
-    } else if (cohort) {
-      result = await ctx.db
-        .query('members')
-        .withIndex('by_status_cohort', (q) =>
-          q.eq('status', 'active').eq('cohort', cohort),
-        )
-        .order('desc')
-        .paginate(paginationOpts)
-    } else if (university) {
-      result = await ctx.db
-        .query('members')
-        .withIndex('by_status_university', (q) =>
-          q.eq('status', 'active').eq('university', university),
-        )
-        .order('desc')
-        .paginate(paginationOpts)
-    } else {
-      result = await ctx.db
+      }
+      if (region) {
+        return ctx.db
+          .query('members')
+          .withIndex('by_status_region', (q) =>
+            q.eq('status', 'active').eq('region', region),
+          )
+          .order('desc')
+      }
+      if (cohort) {
+        return ctx.db
+          .query('members')
+          .withIndex('by_status_cohort', (q) =>
+            q.eq('status', 'active').eq('cohort', cohort),
+          )
+          .order('desc')
+      }
+      if (university) {
+        return ctx.db
+          .query('members')
+          .withIndex('by_status_university', (q) =>
+            q.eq('status', 'active').eq('university', university),
+          )
+          .order('desc')
+      }
+      return ctx.db
         .query('members')
         .withIndex('by_status_score', (q) => q.eq('status', 'active'))
         .order('desc')
-        .paginate(paginationOpts)
     }
 
     // 인덱스/검색으로 좁히지 못한 나머지 조건은 페이지 안에서 확정
-    let page = result.page
-    if (industry) page = page.filter((m) => m.industry.includes(industry))
-    if (helpOffer) page = page.filter((m) => m.helpOffer.includes(helpOffer))
-    if (searchTerm) {
-      if (region) page = page.filter((m) => m.region === region)
-      if (cohort) page = page.filter((m) => m.cohort === cohort)
-      if (university) page = page.filter((m) => m.university === university)
+    const refine = (page: Doc<'members'>[]) => {
+      let rows = page
+      if (industry) rows = rows.filter((m) => m.industry.includes(industry))
+      if (helpOffer) rows = rows.filter((m) => m.helpOffer.includes(helpOffer))
+      if (searchTerm) {
+        if (region) rows = rows.filter((m) => m.region === region)
+        if (cohort) rows = rows.filter((m) => m.cohort === cohort)
+        if (university) rows = rows.filter((m) => m.university === university)
+      }
+      return rows
     }
-    return { ...result, page: page.map(toPublicMember) }
+
+    if (legacy) {
+      return refine(await buildBase().take(legacyTake())).map(toPublicMember)
+    }
+
+    const result = await buildBase().paginate(paginationOpts)
+    return { ...result, page: refine(result.page).map(toPublicMember) }
   },
 })
 
