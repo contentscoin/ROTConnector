@@ -4,6 +4,7 @@ import { mutation, query } from './_generated/server'
 import type { QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { requireMember } from './auth'
+import { isLegacyList, legacyTake } from './lib/legacyList'
 
 const categoryValidator = v.union(
   v.literal('notice'),
@@ -43,23 +44,40 @@ async function withAuthor(ctx: QueryCtx, item: Announcement) {
  */
 export const list = query({
   args: {
-    paginationOpts: paginationOptsValidator,
+    // optional: 구 번들(useQuery)은 paginationOpts 없이 호출한다 → 배열 반환
+    paginationOpts: v.optional(paginationOptsValidator),
     category: v.optional(categoryValidator),
+    // 구 HomePage: useQuery(api.announcements.list, { limit: 2 })
+    limit: v.optional(v.number()),
   },
-  handler: async (ctx, { paginationOpts, category }) => {
-    const result = category
-      ? await ctx.db
-          .query('announcements')
-          .withIndex('by_status_category_created', (q) =>
-            q.eq('status', 'active').eq('category', category),
-          )
-          .order('desc')
-          .paginate(paginationOpts)
-      : await ctx.db
-          .query('announcements')
-          .withIndex('by_status_created', (q) => q.eq('status', 'active'))
-          .order('desc')
-          .paginate(paginationOpts)
+  handler: async (ctx, { paginationOpts, category, limit }) => {
+    const legacy = isLegacyList(paginationOpts)
+
+    const buildBase = () =>
+      category
+        ? ctx.db
+            .query('announcements')
+            .withIndex('by_status_category_created', (q) =>
+              q.eq('status', 'active').eq('category', category),
+            )
+            .order('desc')
+        : ctx.db
+            .query('announcements')
+            .withIndex('by_status_created', (q) => q.eq('status', 'active'))
+            .order('desc')
+
+    if (legacy) {
+      // 구 프론트는 pinned 포함·pinned 우선 정렬 배열을 기대했다.
+      const rows = await buildBase().take(legacyTake(Math.max(limit ?? 30, 30)))
+      const sorted = rows.slice().sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+        return b.createdAt - a.createdAt
+      })
+      const items = sorted.slice(0, legacyTake(limit ?? 30))
+      return await Promise.all(items.map((item) => withAuthor(ctx, item)))
+    }
+
+    const result = await buildBase().paginate(paginationOpts)
     const page = await Promise.all(
       result.page.filter((item) => !item.pinned).map((item) => withAuthor(ctx, item)),
     )

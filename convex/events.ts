@@ -7,6 +7,7 @@ import type { Id } from './_generated/dataModel'
 import { requireAdmin, requireMember, memberFromToken } from './auth'
 import { createNotification, pushEnabled } from './notify'
 import { applyRsvpDelta, eventRsvpKey, readCounter } from './rollup'
+import { isLegacyList, legacyTake } from './lib/legacyList'
 
 const rsvpStatus = v.union(v.literal('going'), v.literal('interested'))
 
@@ -51,19 +52,34 @@ async function myRsvpFor(
  */
 export const list = query({
   args: {
-    paginationOpts: paginationOptsValidator,
+    // optional: 구 번들(useQuery)은 paginationOpts 없이 호출한다 → 배열 반환
+    paginationOpts: v.optional(paginationOptsValidator),
     kind: v.optional(v.union(v.literal('event'), v.literal('sponsor'))),
     token: v.optional(v.string()),
   },
   handler: async (ctx, { paginationOpts, kind, token }) => {
-    const result = kind
-      ? await ctx.db
+    const legacy = isLegacyList(paginationOpts)
+    const base = kind
+      ? ctx.db
           .query('events')
           .withIndex('by_kind', (q) => q.eq('kind', kind))
           .order('desc')
-          .paginate(paginationOpts)
-      : await ctx.db.query('events').order('desc').paginate(paginationOpts)
+      : ctx.db.query('events').order('desc')
+
     const me = await memberFromToken(ctx, token)
+
+    if (legacy) {
+      const rows = await base.take(legacyTake())
+      return await Promise.all(
+        rows.map(async (e) => ({
+          ...e,
+          ...(await rsvpCounts(ctx, e._id)),
+          myRsvp: await myRsvpFor(ctx, e._id, me?._id ?? null),
+        })),
+      )
+    }
+
+    const result = await base.paginate(paginationOpts)
     const page = await Promise.all(
       result.page.map(async (e) => ({
         ...e,

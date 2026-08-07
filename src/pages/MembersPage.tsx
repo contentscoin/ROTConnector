@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { Search, X, Users, UserRoundPen, ChevronRight } from 'lucide-react'
 import { api } from '../../convex/_generated/api'
+import { paginatedApi } from '../lib/paginatedApi'
 import {
   Chip,
   EmptyState,
@@ -51,7 +52,7 @@ export function MembersPage() {
     status,
     loadMore,
   } = usePaginatedQuery(
-    api.members.list,
+    paginatedApi.membersList,
     {
       q: debouncedQ || undefined,
       cohort: cohort || undefined,

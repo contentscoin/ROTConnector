@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePaginatedQuery } from 'convex/react'
 import { Plus, Inbox, Search, X } from 'lucide-react'
-import { api } from '../../convex/_generated/api'
+import { paginatedApi } from '../lib/paginatedApi'
 import {
   Chip,
   EmptyState,
@@ -62,7 +62,7 @@ export function RequestsPage() {
     status: pageStatus,
     loadMore,
   } = usePaginatedQuery(
-    api.requests.list,
+    paginatedApi.requestsList,
     {
       status: status === 'all' ? undefined : status,
       category: category || undefined,
